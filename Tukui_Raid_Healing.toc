@@ -1,0 +1,9 @@
+## Interface: 40200
+## Title: |cffC495DDTukui Raid Healium|r
+## Notes: Healium raid frames for Tukui
+## Author: SinaC
+## Credits: Tukz, Engypoo
+## Version: 1.0
+## RequiredDeps: Tukui
+
+Tukui_Raid_Healing.xml
