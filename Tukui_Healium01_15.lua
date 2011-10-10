@@ -11,6 +11,7 @@
 -- change alpha when dead/ghost or disconnected -> OK if dead/ghost/disconnected
 -- HealiumEnabled -> OK
 -- avoid using _G[] to get raid frame, use a local list -> OK
+-- pets: could Share be used to create pets ? -> OK
 
 -- TO TEST
 -- aggro ==> C["unitframes"].aggro
@@ -19,6 +20,8 @@
 -- buff/debuff are not shown when connecting  this is because unit is not yet set when Shared is called (unit = raid instead of player1)   SEEMS TO WORK BUT SHOULD BE RETESTED
 
 -- TODO:
+-- @raid26 instead of @raid16
+-- if grid -> raid,party
 -- range: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua
 -- spell/buff/debuff tooltip (see Healium_HealButton_OnEnter in HealiumHealButton)
 -- spell must be learned to appear in button (question-mark if not learned)
@@ -27,7 +30,6 @@
 --		http://www.wowwiki.com/API_IsUsableSpell
 --		local name = GetSpellInfo(spellID)		--> http://www.wowwiki.com/API_GetSpellInfo
 --		local isLearned = GetSpellInfo(name)	--> http://www.wowwiki.com/API_GetSpellInfo
--- use spec name instead of spec ID in settings => DOESNT WORK spec name is localized
 
 local ADDON_NAME, ns = ...
 local oUF = oUFTukui or oUF
@@ -84,63 +86,11 @@ local function GetHealiumSettings()
 	if not HealiumEnabled() then return end
 	local ptt = GetPrimaryTalentTree()
 	if not ptt then return end
-	-- local settings
-	-- if ptt > 0 then
-		-- -- search by name
-		-- local _, name = GetTalentTabInfo(ptt)
-		-- DEBUG("GetHealiumSettings spec name:"..name)
-		-- settings = HealiumSettings[T.myclass][name]
-	-- else
-		-- ptt = 1
-	-- end
-	-- -- search by id
-	-- if not settings then
-		-- settings = HealiumSettings[T.myclass][ptt]
-	-- end
-	--return settings
 	return HealiumSettings[T.myclass][ptt]
-end
-
--- Return number of person in the party/raid
-local function GetNumMembers()
-	local numparty = GetNumPartyMembers() -- excluding self
-	local numraid = GetNumRaidMembers() -- including self
-	-- --	if not in raid
-	-- --		if alone in the party, return 0
-	-- --		else, return numparty+1
-	-- --	else, return numraid
-	-- return numraid == 0 and (numparty > 0 and numparty+1 or numparty) or numraid
-	return numraid == 0 and numparty + (C["unitframes"].showsolo and 1 or 0) or numraid
 end
 
 -- Get frame from unit
 local function GetFrameFromUnit(unit)
-	-- -- players
-	-- local numMembers = GetNumMembers()
-	-- for i = 1, numMembers, 1 do
-		-- local frameName = "oUF_TukuiHealiumRaid0115UnitButton"..i
-		-- local frame = _G[frameName]
-		-- if frame and frame:IsShown() then
-			-- if frame.unit == unit then
-				-- return frame
-			-- end
-		-- else
-			-- --DEBUG("GetFrameFromUnit: Raid Frame:"..frameName.." not found or hidden")
-		-- end
-	-- end
-	-- -- -- pets
-	-- -- for i = 1, 40, 1 do
-		-- -- local frameName = "oUF_TukuiPartyPet"..i
-		-- -- local frame = _G[frameName]
-		-- -- if frame then
-			-- -- if frame.unit == unit then
-				-- -- return frame
-			-- -- end
-		-- -- else
-			-- -- break
-		-- -- end
-	-- -- end
-	-- return
 	for _, frame in ipairs(HealiumFrames) do
 		--DEBUG("GetFrameFromUnit:"..frame:GetName().."  "..(frame.unit or 'nil').."  "..(frame:IsShown() and 'shown' or 'hidden'))
 		if frame and frame:IsShown() and frame.unit == unit then return frame end
@@ -150,27 +100,6 @@ end
 
 -- Loop among every members in party/raid and call a function
 local function ForEachMember(fct, ...)
-	-- -- players
-	-- local numMembers = GetNumMembers()
-	-- for i = 1, numMembers, 1 do
-		-- local frameName = "oUF_TukuiHealiumRaid0115UnitButton"..i
-		-- local frame = _G[frameName]
-		-- if frame and frame:IsShown() then
-			-- fct(frame, ...)
-		-- else
-			-- --DEBUG("ForEachMember Raid Frame:"..frameName.." not found or hidden")
-		-- end
-	-- end
-	-- -- -- pets
-	-- -- for i = 1, 40, 1 do
-		-- -- local frameName = "oUF_TukuiPartyPet"..i
-		-- -- local frame = _G[frameName]
-		-- -- if frame then
-			-- -- fct(frame, ...)
-		-- -- else
-			-- -- break
-		-- -- end
-	-- -- end
 	for _, frame in ipairs(HealiumFrames) do
 		--DEBUG("ForEachMember:"..frame:GetName().."  "..(frame.unit or 'nil').."  "..(frame:IsShown() and 'shown' or 'hidden'))
 		if frame and frame:IsShown() then
@@ -912,7 +841,15 @@ local function Shared(self, unit)
 	return self
 end
 
+----------------------------------------------------------
+-- Main
+
+-- TODO: check settings integrity
+-- no more than MaxButtonCount entry in Settings[class][spec].spells
+
 oUF:RegisterStyle('TukuiHealiumR01R15', Shared)
+
+-- Players
 oUF:Factory(function(self)
 	oUF:SetActiveStyle("TukuiHealiumR01R15")
 
@@ -934,14 +871,17 @@ oUF:Factory(function(self)
 	"yOffset", T.Scale(-4))
 	raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
 	
-	local pets = {} 
-	-- pets[1] = oUF:Spawn('partypet1', 'oUF_TukuiPartyPet1') 
-	-- pets[1]:SetPoint('TOPLEFT', raid, 'TOPLEFT', 0, -240*T.raidscale)
-	-- pets[1]:Size(150*T.raidscale, 32*T.raidscale)
-	-- for i =2, 4 do 
-		-- pets[i] = oUF:Spawn('partypet'..i, 'oUF_TukuiPartyPet'..i) 
-		-- pets[i]:SetPoint('TOP', pets[i-1], 'BOTTOM', 0, -8)
-		-- pets[i]:Size(150*T.raidscale, 32*T.raidscale)
+	-- local pets = {}
+	-- if not AdvancedPetFrames then
+		-- pets[1] = oUF:Spawn('partypet1', 'oUF_TukuiPartyPet1') 
+		-- pets[1]:SetPoint('TOPLEFT', raid, 'TOPLEFT', 0, -240*T.raidscale)
+		-- --pets[1]:SetPoint('CENTER', UIParent, 'CENTER', 0, 0)
+		-- pets[1]:Size(150*T.raidscale, 32*T.raidscale)
+		-- for i = 2, 4 do 
+			-- pets[i] = oUF:Spawn('partypet'..i, 'oUF_TukuiPartyPet'..i) 
+			-- pets[i]:SetPoint('TOP', pets[i-1], 'BOTTOM', 0, -8)
+			-- pets[i]:Size(150*T.raidscale, 32*T.raidscale)
+		-- end
 	-- end
 
 	local RaidMove = CreateFrame("Frame")
@@ -958,34 +898,67 @@ oUF:Factory(function(self)
 			local numparty = GetNumPartyMembers()
 			if numparty > 0 and numraid == 0 or numraid > 0 and numraid <= 5 then
 				raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
-				for i,v in ipairs(pets) do v:Enable() end
+				--for i,v in ipairs(pets) do v:Enable() end
 			elseif numraid > 5 and numraid <= 10 then
 				raid:SetPoint('TOPLEFT', UIParent, 150, -260*T.raidscale)
-				for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Enable() end
 			elseif numraid > 10 and numraid <= 15 then
 				raid:SetPoint('TOPLEFT', UIParent, 150, -170*T.raidscale)
-				for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Enable() end
 			elseif numraid > 15 then
-				for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Disable() end
+				--for i,v in ipairs(pets) do v:Enable() end
 			end
 		end
 	end)
-
-	if HealiumEnabled() then
-		local healiumEventHandler = CreateFrame("Frame")
-		healiumEventHandler:RegisterEvent("PLAYER_ENTERING_WORLD")
-		healiumEventHandler:RegisterEvent("ADDON_LOADED")
-		healiumEventHandler:RegisterEvent("RAID_ROSTER_UPDATE")
-		healiumEventHandler:RegisterEvent("PARTY_MEMBERS_CHANGED")
-		healiumEventHandler:RegisterEvent("PLAYER_REGEN_ENABLED")
-		healiumEventHandler:RegisterEvent("PLAYER_TALENT_UPDATE")
-		healiumEventHandler:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-		-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_DISABLE")
-		-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_ENABLE")
-		healiumEventHandler:RegisterEvent("UNIT_AURA")
-		healiumEventHandler:SetScript("OnEvent", HealiumOnEvent)
-	end
 end)
 
--- TODO: check settings integrity
--- no more than MaxButtonCount entry in Settings[class][spec].spells
+-- Pets
+oUF:Factory(function(self)
+	oUF:SetActiveStyle("TukuiHealiumR01R15")
+
+	local raid = self:SpawnHeader("oUF_TukuiHealiumRaidPet0115", "SecureGroupPetHeaderTemplate", "custom [@raid16,exists] hide;show",
+		'oUF-initialConfigFunction', [[
+			local header = self:GetParent()
+			self:SetWidth(header:GetAttribute('initial-width'))
+			self:SetHeight(header:GetAttribute('initial-height'))
+		]],
+		'initial-width', T.Scale(150*T.raidscale),--T.Scale(66*C["unitframes"].gridscale*T.raidscale),
+		'initial-height', T.Scale(32*T.raidscale),--T.Scale(50*C["unitframes"].gridscale*T.raidscale),
+		"showSolo", C["unitframes"].showsolo,
+		"showParty", true,
+		"showPlayer", C["unitframes"].showplayerinparty,
+		"showRaid", true,
+		--"xoffset", T.Scale(3),
+		"yOffset", T.Scale(-3),
+		--"point", "LEFT",
+		"groupFilter", "1,2,3,4,5,6,7,8",
+		"groupingOrder", "1,2,3,4,5,6,7,8",
+		"groupBy", "GROUP",
+		--"maxColumns", 8,
+		"unitsPerColumn", 5,
+		--"columnSpacing", T.Scale(3),
+		--"columnAnchorPoint", "TOP",
+		"filterOnPet", true,
+		"sortMethod", "NAME"
+	)
+	--raid:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+	raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 200, -400)
+end)
+
+if HealiumEnabled() then
+	local healiumEventHandler = CreateFrame("Frame")
+	healiumEventHandler:RegisterEvent("PLAYER_ENTERING_WORLD")
+	healiumEventHandler:RegisterEvent("ADDON_LOADED")
+	healiumEventHandler:RegisterEvent("RAID_ROSTER_UPDATE")
+	healiumEventHandler:RegisterEvent("PARTY_MEMBERS_CHANGED")
+	healiumEventHandler:RegisterEvent("PLAYER_REGEN_ENABLED")
+	healiumEventHandler:RegisterEvent("PLAYER_TALENT_UPDATE")
+	healiumEventHandler:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+	-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_DISABLE")
+	-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_ENABLE")
+	healiumEventHandler:RegisterEvent("UNIT_AURA")
+	healiumEventHandler:SetScript("OnEvent", HealiumOnEvent)
+end
