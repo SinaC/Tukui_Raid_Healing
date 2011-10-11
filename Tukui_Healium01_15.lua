@@ -12,18 +12,29 @@
 -- HealiumEnabled -> OK
 -- avoid using _G[] to get raid frame, use a local list -> OK
 -- pets: could Share be used to create pets ? -> OK
+-- spell/buff/debuff size/spacing -> OK
+-- aggro ==> C["unitframes"].aggro -> OK
+-- sound when a dispellable spell is found -> OK
+-- spell tooltip -> OK
 
 -- TO TEST
--- aggro ==> C["unitframes"].aggro
 -- delayed healium buttons creation while in combat (call HealiumCreateFrameButtons when out of combat)
--- spell/buff/debuff size/spacing
 -- buff/debuff are not shown when connecting  this is because unit is not yet set when Shared is called (unit = raid instead of player1)   SEEMS TO WORK BUT SHOULD BE RETESTED
+-- buff/debuff tooltip (see Healium_HealButton_OnEnter in HealiumHealButton)
 
 -- TODO:
--- @raid26 instead of @raid16
--- if grid -> raid,party
+-- rebirth not shown when dead
+-- sometimes buff/debuff doesn't disappear
+-- why moveui moves automatically?
+-- doesn't work if no settings found for current spec on priest
+-- nameplate width/height
+-- multirow: 2 rows of spell/buff/debuff
+--	if grid -> raid, party
+--	else,
+--		create grid -> custom [@raid26,exists] show;hide
+--		if healium, create healium -> custom [@raid26,exists] hide;show + pets
+--		else, create normal custom [@raid26,exists] hide;show
 -- range: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua
--- spell/buff/debuff tooltip (see Healium_HealButton_OnEnter in HealiumHealButton)
 -- spell must be learned to appear in button (question-mark if not learned)
 --		http://www.wowwiki.com/API_GetSpellBookItemInfo
 --		http://www.wowwiki.com/API_GetSpellBookItemInfo
@@ -51,12 +62,15 @@ local HealiumDebug = true
 local MaxButtonCount = 10
 local MaxDebuffCount = 8
 local MaxBuffCount = 6
+local NameplateWidth = 120 -- 150
+local NameplateHeight = 28 -- 32
 
 -------------------------------------------------------
 -- Variables
 -------------------------------------------------------
 local HealiumDelayedButtonsCreation = {}
 local HealiumFrames = {}
+local LastDebuffSoundTime = GetTime()
 
 -------------------------------------------------------
 -- Helpers
@@ -108,6 +122,24 @@ local function ForEachMember(fct, ...)
 	end
 end
 
+-- Get book spell id from spell name
+local function GetSpellBookID(spellName)
+	for i = 1, 300, 1 do
+		local spellBookName = GetSpellBookItemName(i, SpellBookFrame.bookType)
+		if (not spellBookName) then break end
+		if (spellName == spellBookName) then
+			local slotType = GetSpellBookItemInfo(i, SpellBookFrame.bookType)
+			if (slotType == "FUTURESPELL") then break end
+			return i
+		end
+	end            
+	return nil
+end
+
+local function PlayDebuffSound()
+	PlaySoundFile("Sound\\Doodad\\BellTollHorde.wav")
+end
+
 -------------------------------------------------------
 -- Healium functions
 -------------------------------------------------------
@@ -129,7 +161,7 @@ local function HealiumUpdateFrameDebuffsPosition(frame)
 	local lastButton = frame.healiumButtons[#settings.spells]
 	local firstDebuff = frame.healiumDebuffs[1]
 	--DEBUG("lastButton: "..lastButton:GetName().."  firstDebuff: "..firstDebuff:GetName())
-	local debuffSpacing = settings and settings.debuffSpacing or frame:GetHeight()
+	local debuffSpacing = settings and settings.debuffSpacing or 2
 	firstDebuff:ClearAllPoints()
 	firstDebuff:Point("TOPLEFT", lastButton, "TOPRIGHT", debuffSpacing, 0)
 end
@@ -224,7 +256,6 @@ local function HealiumUpdateFrameBuffsDebuffsSpecialSpells(frame)
 			-- get debuff
 			local name, _, icon, count, debuffType, duration, expirationTime, _, _, _, spellID = UnitDebuff(unit, i) 
 			if not name then break end
-			--debuffType = "Curse" -- TODO: remove
 			tinsert(debuffs, { spellID, debuffType } )
 			-- is debuff blacklisted?
 			local filtered = false
@@ -328,6 +359,7 @@ local function HealiumUpdateFrameBuffsDebuffsSpecialSpells(frame)
 			if spellSetting.cures then
 				for _, debuff in ipairs(debuffs) do
 					local debuffType = debuff[2]
+					--debuffType = "Curse"
 					if debuffType then
 						local debuffColor = DebuffTypeColor[debuffType] or DebuffTypeColor["none"]
 						local cureFound = false
@@ -338,6 +370,17 @@ local function HealiumUpdateFrameBuffsDebuffsSpecialSpells(frame)
 							button:SetBackdropColor(debuffColor.r, debuffColor.g, debuffColor.b)
 							--button:SetBackdropBorderColor(debuffColor.r, debuffColor.g, debuffColor.b)
 							button.texture:SetVertexColor(debuffColor.r, debuffColor.g, debuffColor.b)
+							-- Play sound
+							--print("DEBUFF dispellable")
+							if UnitInRange(unit) then
+								local now = GetTime()
+								--print("DEBUFF in range: "..now.."  "..LastDebuffSoundTime)
+								if now > (LastDebuffSoundTime + 7) then
+									--print("DEBUFF in time")
+									PlayDebuffSound()
+									LastDebuffSoundTime = now
+								end
+							end
 						end
 					end
 				end
@@ -360,10 +403,14 @@ local function HealiumUpdateFrameButtons(frame)
 			if spellSetting.spellID then
 				kind = "spell"
 				name, _, icon = GetSpellInfo(spellSetting.spellID)
+				button.spellBookID = GetSpellBookID(name)
+				button.macro = nil
 			elseif spellSetting.macroName then
 				kind = "macro"
 				icon = select(2,GetMacroInfo(spellSetting.macroName))
 				name = spellSetting.macroName
+				button.spellBookID = nil
+				button.macroName = name
 			end
 			if icon then
 				button.texture:SetTexture(icon)
@@ -404,6 +451,55 @@ local function HealiumUpdateCooldowns()
 	end
 end
 
+local function HealiumButtonOnEnter(self)
+	local settings = GetHealiumSettings()
+	if not settings then return end
+
+	local TukuiTooltipAnchor = _G["TukuiTooltipAnchor"]
+	GameTooltip:SetOwner(TukuiTooltipAnchor, "ANCHOR_NONE")
+	if self.spellBookID then
+		GameTooltip:SetSpellBookItem(self.spellBookID, SpellBookFrame.bookType)
+	elseif self.macroName then
+		GameTooltip:AddLine("Macro: "..self.macroName)
+	end
+	local unit = SecureButton_GetUnit(self)
+	if not UnitExists(unit) then return end
+	local unitName = UnitName(unit)
+	if (not unitName) then unitName = "-" end
+	GameTooltip:AddLine("Target: |cFF00FF00"..unitName,1,1,1)
+	GameTooltip:Show()
+end
+
+local function HealiumDebuffOnEnter(self)
+	if ( self:GetCenter() > GetScreenWidth()/2 ) then
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+	else
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	end
+	--local unit = self:GetParent().unit
+	-- local filter
+	-- if ( SHOW_DISPELLABLE_DEBUFFS == "1" and UnitCanAssist("player", unit) ) then
+		-- filter = "RAID"
+	-- end
+	-- GameTooltip:SetUnitDebuff(unit, self:GetID(), filter)
+	GameTooltip:SetUnitDebuff(self.unit, self:GetID())
+end
+
+local function HealiumBuffOnEnter(self)
+	if ( self:GetCenter() > GetScreenWidth()/2 ) then
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+	else
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+	end
+	--local unit = self:GetParent().unit
+	-- local filter
+	-- if ( SHOW_DISPELLABLE_DEBUFFS == "1" and UnitCanAssist("player", unit) ) then
+		-- filter = "RAID"
+	-- end
+	-- GameTooltip:SetUnitDebuff(unit, self:GetID(), filter)
+	GameTooltip:SetUnitBuff(self.unit, self:GetID())
+end
+
 local function HealiumCreateFrameButtons(frame)
 	if not HealiumEnabled() then return end
 	if not frame then return end
@@ -431,7 +527,7 @@ local function HealiumCreateFrameButtons(frame)
 		button.texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 		button.texture:SetPoint("TOPLEFT", button ,"TOPLEFT", 0, 0)
 		button.texture:SetPoint("BOTTOMRIGHT", button ,"BOTTOMRIGHT", 0, 0)
-		button:SetPushedTexture("Interface/Buttons/UI-Quickslot-Depress") -- TODO: use StyleButton from Tukui\Tukui\core\api.lua
+		button:SetPushedTexture("Interface/Buttons/UI-Quickslot-Depress")
 		button:SetHighlightTexture("Interface/Buttons/ButtonHilight-Square")
 		-- cooldown overlay
 		button.cooldown = CreateFrame("Cooldown", "$parentCD", button, "CooldownFrameTemplate")
@@ -440,6 +536,9 @@ local function HealiumCreateFrameButtons(frame)
 		button:RegisterForClicks("AnyUp")
 		button:SetAttribute("useparent-unit","true")
 		button:SetAttribute("*unit2", "target")
+		-- tooltip
+		button:SetScript("OnEnter", HealiumButtonOnEnter)
+		button:SetScript("OnLeave", HealiumButtonOnLeave)
 		-- hide
 		button:Hide()
 		-- save previous
@@ -463,6 +562,18 @@ local function HealiumCreateDelayedButtons()
 		end
 	end
 	HealiumDelayedButtonsCreation = {}
+end
+
+local function HealiumUpdateThread(self, event, unit)
+	if (self.unit ~= unit) or (unit == "target" or unit == "pet" or unit == "focus" or unit == "focustarget" or unit == "targettarget") then return end
+	local threat = UnitThreatSituation(self.unit)
+	if (threat and threat > 1) then
+		--self.Name:SetTextColor(1,0.1,0.1)
+		local r, g, b = GetThreatStatusColor(status)
+		self.Name:SetTextColor(r, g, b)
+	else
+		self.Name:SetTextColor(1,1,1)
+	end 
 end
 
 -- PostUpdateHealth
@@ -564,17 +675,6 @@ local function HealiumOnEvent(self, event, ...)
 		local frame = GetFrameFromUnit(arg1)
 		if frame then HealiumUpdateFrameBuffsDebuffsSpecialSpells(frame) end -- Update buff/debuff only for unit
 	end
-
-	-- if event == "PARTY_MEMBER_DISABLE" then
-		-- --WARNING("PARTY_MEMBER_DISABLE:"..(arg1 or 'nil'))
-		-- ForEachMember(HealiumSetFrameVisibility)
-	-- end
-
-	-- if event == "PARTY_MEMBER_ENABLE" then
-		-- -- TODO: enable debuffs and set alpha to 0.5
-		-- --WARNING("PARTY_MEMBER_ENABLE:"..(arg1 or 'nil'))
-		-- ForEachMember(HealiumSetFrameVisibility)
-	-- end
 end
 
 -------------------------------------------------------------------
@@ -682,10 +782,17 @@ local function Shared(self, unit)
     self:RegisterEvent("PARTY_MEMBERS_CHANGED", T.MLAnchorUpdate)
 
 	if C["unitframes"].aggro == true then
-		table.insert(self.__elements, T.UpdateThreat)
-		self:RegisterEvent('PLAYER_TARGET_CHANGED', T.UpdateThreat)
-		self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', T.UpdateThreat)
-		self:RegisterEvent('UNIT_THREAT_SITUATION_UPDATE', T.UpdateThreat)
+		if HealiumEnabled() then
+			table.insert(self.__elements, HealiumUpdateThread)
+			self:RegisterEvent('PLAYER_TARGET_CHANGED', HealiumUpdateThread)
+			self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', HealiumUpdateThread)
+			self:RegisterEvent('UNIT_THREAT_SITUATION_UPDATE', HealiumUpdateThread)
+		else
+			table.insert(self.__elements, T.UpdateThreat)
+			self:RegisterEvent('PLAYER_TARGET_CHANGED', T.UpdateThreat)
+			self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', T.UpdateThreat)
+			self:RegisterEvent('UNIT_THREAT_SITUATION_UPDATE', T.UpdateThreat)
+		end
     end
 
 	if C["unitframes"].showsymbols == true then
@@ -735,6 +842,7 @@ local function Shared(self, unit)
 		}
 	end
 
+	-- TODO: function to create buff/debuff
 	if HealiumEnabled() then
 		local settings = GetHealiumSettings()
 		-- buttons
@@ -745,7 +853,6 @@ local function Shared(self, unit)
 		end
 
 		-- debuffs
-		-- TODO: tooltip
 		self.healiumDebuffs = {}
 		local debuffSize = settings and settings.debuffSize or self:GetHeight()
 		local debuffSpacing = settings and settings.debuffSpacing or 2
@@ -778,14 +885,18 @@ local function Shared(self, unit)
 			debuff.count:SetFont(C["media"].uffont, 14, "OUTLINE")
 			debuff.count:Point("BOTTOMRIGHT", 1, -1)
 			debuff.count:SetJustifyH("CENTER")
-			--hide
+			-- tooltip
+			debuff:SetScript("OnEnter", HealiumDebuffOnEnter)
+			debuff:SetScript("OnLeave", function(self) 
+				GameTooltip:Hide()
+			end)
+			-- hide
 			debuff:Hide()
 			-- save debuff
 			tinsert(self.healiumDebuffs, debuff)
 		end
 
 		-- buffs
-		-- TODO: tooltip
 		self.healiumBuffs = {}
 		local buffSize = settings and settings.buffSize or self:GetHeight()
 		local buffSpacing = settings and settings.buffSpacing or 2
@@ -815,6 +926,11 @@ local function Shared(self, unit)
 			buff.count:SetFont(C["media"].uffont, 14, "OUTLINE")
 			buff.count:Point("BOTTOMRIGHT", 1, -1)
 			buff.count:SetJustifyH("CENTER")
+			-- tooltip
+			buff:SetScript("OnEnter", HealiumBuffOnEnter)
+			buff:SetScript("OnLeave", function(self) 
+				GameTooltip:Hide()
+			end)
 			-- hide
 			buff:Hide()
 			-- save buff
@@ -847,20 +963,23 @@ end
 -- TODO: check settings integrity
 -- no more than MaxButtonCount entry in Settings[class][spec].spells
 
+local playerRaid = nil
+local petRaid = nil
+
 oUF:RegisterStyle('TukuiHealiumR01R15', Shared)
 
 -- Players
 oUF:Factory(function(self)
 	oUF:SetActiveStyle("TukuiHealiumR01R15")
 
-	local raid = self:SpawnHeader("oUF_TukuiHealiumRaid0115", nil, "custom [@raid16,exists] hide;show", 
+	playerRaid = self:SpawnHeader("oUF_TukuiHealiumRaid0115", nil, "custom [@raid16,exists] hide;show", 
 	'oUF-initialConfigFunction', [[
 		local header = self:GetParent()
 		self:SetWidth(header:GetAttribute('initial-width'))
 		self:SetHeight(header:GetAttribute('initial-height'))
 	]],
-	'initial-width', T.Scale(150*T.raidscale),
-	'initial-height', T.Scale(32*T.raidscale),
+	'initial-width', T.Scale(NameplateWidth*T.raidscale),
+	'initial-height', T.Scale(NameplateHeight*T.raidscale),
 	"showSolo", C["unitframes"].showsolo,
 	"showParty", true, 
 	"showPlayer", C["unitframes"].showplayerinparty, 
@@ -869,7 +988,7 @@ oUF:Factory(function(self)
 	"groupingOrder", "1,2,3,4,5,6,7,8", 
 	"groupBy", "GROUP", 
 	"yOffset", T.Scale(-4))
-	raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
+	playerRaid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
 	
 	-- local pets = {}
 	-- if not AdvancedPetFrames then
@@ -884,49 +1003,49 @@ oUF:Factory(function(self)
 		-- end
 	-- end
 
-	local RaidMove = CreateFrame("Frame")
-	RaidMove:RegisterEvent("PLAYER_ENTERING_WORLD")
-	RaidMove:RegisterEvent("RAID_ROSTER_UPDATE")
-	RaidMove:RegisterEvent("PARTY_LEADER_CHANGED")
-	RaidMove:RegisterEvent("PARTY_MEMBERS_CHANGED")
-	RaidMove:SetScript("OnEvent", function(self)
-		if InCombatLockdown() then
-			self:RegisterEvent("PLAYER_REGEN_ENABLED")
-		else
-			self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-			local numraid = GetNumRaidMembers()
-			local numparty = GetNumPartyMembers()
-			if numparty > 0 and numraid == 0 or numraid > 0 and numraid <= 5 then
-				raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
-				--for i,v in ipairs(pets) do v:Enable() end
-			elseif numraid > 5 and numraid <= 10 then
-				raid:SetPoint('TOPLEFT', UIParent, 150, -260*T.raidscale)
-				--for i,v in ipairs(pets) do v:Disable() end
-				--for i,v in ipairs(pets) do v:Enable() end
-			elseif numraid > 10 and numraid <= 15 then
-				raid:SetPoint('TOPLEFT', UIParent, 150, -170*T.raidscale)
-				--for i,v in ipairs(pets) do v:Disable() end
-				--for i,v in ipairs(pets) do v:Enable() end
-			elseif numraid > 15 then
-				--for i,v in ipairs(pets) do v:Disable() end
-				--for i,v in ipairs(pets) do v:Enable() end
-			end
-		end
-	end)
+	-- local RaidMove = CreateFrame("Frame")
+	-- RaidMove:RegisterEvent("PLAYER_ENTERING_WORLD")
+	-- RaidMove:RegisterEvent("RAID_ROSTER_UPDATE")
+	-- RaidMove:RegisterEvent("PARTY_LEADER_CHANGED")
+	-- RaidMove:RegisterEvent("PARTY_MEMBERS_CHANGED")
+	-- RaidMove:SetScript("OnEvent", function(self)
+		-- if InCombatLockdown() then
+			-- self:RegisterEvent("PLAYER_REGEN_ENABLED")
+		-- else
+			-- self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+			-- local numraid = GetNumRaidMembers()
+			-- local numparty = GetNumPartyMembers()
+			-- if numparty > 0 and numraid == 0 or numraid > 0 and numraid <= 5 then
+				-- playerRaid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
+				-- --for i,v in ipairs(pets) do v:Enable() end
+			-- elseif numraid > 5 and numraid <= 10 then
+				-- playerRaid:SetPoint('TOPLEFT', UIParent, 150, -260*T.raidscale)
+				-- --for i,v in ipairs(pets) do v:Disable() end
+				-- --for i,v in ipairs(pets) do v:Enable() end
+			-- elseif numraid > 10 and numraid <= 15 then
+				-- playerRaid:SetPoint('TOPLEFT', UIParent, 150, -170*T.raidscale)
+				-- --for i,v in ipairs(pets) do v:Disable() end
+				-- --for i,v in ipairs(pets) do v:Enable() end
+			-- elseif numraid > 15 then
+				-- --for i,v in ipairs(pets) do v:Disable() end
+				-- --for i,v in ipairs(pets) do v:Enable() end
+			-- end
+		-- end
+	-- end)
 end)
 
 -- Pets
 oUF:Factory(function(self)
 	oUF:SetActiveStyle("TukuiHealiumR01R15")
 
-	local raid = self:SpawnHeader("oUF_TukuiHealiumRaidPet0115", "SecureGroupPetHeaderTemplate", "custom [@raid16,exists] hide;show",
+	petRaid = self:SpawnHeader("oUF_TukuiHealiumRaidPet0115", "SecureGroupPetHeaderTemplate", "custom [@raid16,exists] hide;show",
 		'oUF-initialConfigFunction', [[
 			local header = self:GetParent()
 			self:SetWidth(header:GetAttribute('initial-width'))
 			self:SetHeight(header:GetAttribute('initial-height'))
 		]],
-		'initial-width', T.Scale(150*T.raidscale),--T.Scale(66*C["unitframes"].gridscale*T.raidscale),
-		'initial-height', T.Scale(32*T.raidscale),--T.Scale(50*C["unitframes"].gridscale*T.raidscale),
+		'initial-width', T.Scale(NameplateWidth*T.raidscale),--T.Scale(66*C["unitframes"].gridscale*T.raidscale),
+		'initial-height', T.Scale(NameplateHeight*T.raidscale),--T.Scale(50*C["unitframes"].gridscale*T.raidscale),
 		"showSolo", C["unitframes"].showsolo,
 		"showParty", true,
 		"showPlayer", C["unitframes"].showplayerinparty,
@@ -945,7 +1064,8 @@ oUF:Factory(function(self)
 		"sortMethod", "NAME"
 	)
 	--raid:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-	raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 200, -400)
+	--raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 200, -400)
+	petRaid:SetPoint("TOPLEFT", playerRaid, "BOTTOMLEFT", 0, -50)
 end)
 
 if HealiumEnabled() then
@@ -957,8 +1077,6 @@ if HealiumEnabled() then
 	healiumEventHandler:RegisterEvent("PLAYER_REGEN_ENABLED")
 	healiumEventHandler:RegisterEvent("PLAYER_TALENT_UPDATE")
 	healiumEventHandler:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-	-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_DISABLE")
-	-- healiumEventHandler:RegisterEvent("PARTY_MEMBER_ENABLE")
 	healiumEventHandler:RegisterEvent("UNIT_AURA")
 	healiumEventHandler:SetScript("OnEvent", HealiumOnEvent)
 end
