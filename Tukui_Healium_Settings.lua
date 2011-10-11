@@ -1,5 +1,15 @@
 HealiumSettings = {
 	enabled = true,
+	unitframeWidth = 120, -- 150
+	unitframeHeight = 28, -- 32
+	showPercentage = true,
+	showButtonTooltip = true,
+	showBuffDebuffTooltip = true,
+	highlightCure = true, -- highlight dispel button when debuff is dispellable
+	playSoundOnDispel = true, -- play a sound when a debuff is dispellable
+	showDebuff = true, -- display debuff
+	flashCure = false, -- flash dispel button when debuff is dispellable TODO
+	showNoMana = false, -- Turn heal button in blue if not enough mana to cast TODO
 	debuffBlacklist = { 
 		--57724,	-- Berserk
 		57723,	-- Time Warp
@@ -9,6 +19,7 @@ HealiumSettings = {
 		26013,	-- Deserter
 		71041,	-- Dungeon Deserter
 		99413,	-- Deserter
+		97821,	-- Void-Touched
 	},
 	["DRUID"] = {
 		[3] = {
@@ -21,7 +32,7 @@ HealiumSettings = {
 				{ macroName = "NSHT" }, -- Macro Nature Swiftness + Healing Touch
 				{ spellID = 48438 }, -- Wild Growth
 				{ spellID = 2782, cures = { ["Poison"] = true, ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,17)) > 0 end } }, -- Remove Corruption
-				{ spellID = 20484 }, -- Rebirth
+				{ spellID = 20484, rez = true }, -- Rebirth
 			},
 			-- spellSize = 32,
 			-- spellSpacing = 2,
@@ -58,9 +69,9 @@ HealiumSettings = {
 	["MAGE"] = {
 		[1] = {
 			spells = {
-				{ spellID = 475, cures = { ["Curse"] = true }, debuffs = { 36032 } }, -- Remove Curse (Mage)
+				{ spellID = 475, debuffs = { 36032 } }, -- Remove Curse (Mage)
 				{ spellID = 475, cures = { ["Curse"] = true } }, -- Remove Curse (Mage)
-				{ spellID = 475, cures = { ["Curse"] = true }, buffs = { 6117 } }, -- Remove Curse (Mage)
+				{ spellID = 475, buffs = { 6117 } }, -- Remove Curse (Mage)
 			},
 			-- spellSize = 32,
 			-- spellSpacing = 2,

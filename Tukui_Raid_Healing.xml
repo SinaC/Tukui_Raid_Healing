@@ -1,4 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
 	<Script file="Tukui_Healium_Settings.lua"/>
-	<Script file="Tukui_Healium01_15.lua"/>
+	<Script file="Tukui_Healium01_25.lua"/>
+	<Script file="oUF_hTukz_Raid26_40.lua"/>
+	<Script file="oUF_hTukz_Raid01_25.lua"/>
 </Ui>
