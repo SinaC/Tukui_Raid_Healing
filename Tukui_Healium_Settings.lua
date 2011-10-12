@@ -5,11 +5,13 @@ HealiumSettings = {
 	showPercentage = true,
 	showButtonTooltip = true,
 	showBuffDebuffTooltip = true,
-	highlightCure = true, -- highlight dispel button when debuff is dispellable
+	checkRangeBySpell = false, -- very time consuming and not really useful
+	showNoMana = true, -- turn heal button in blue when OOM
+	highlightDispel = true, -- highlight dispel button when debuff is dispellable
 	playSoundOnDispel = true, -- play a sound when a debuff is dispellable
-	showDebuff = true, -- display debuff
-	flashCure = false, -- flash dispel button when debuff is dispellable TODO
-	showNoMana = false, -- Turn heal button in blue if not enough mana to cast TODO
+	showOnlyDispellableDebuff = false, -- display only dispellable debuff
+	showPets = true,
+	flashDispel = false, -- flash dispel button when debuff is dispellable TODO
 	debuffBlacklist = { 
 		--57724,	-- Berserk
 		57723,	-- Time Warp
@@ -31,7 +33,7 @@ HealiumSettings = {
 				{ spellID = 18562, buffs = { 774, 8936 } }, -- Swiftmend, castable only of affected by Rejuvenation or Regrowth
 				{ macroName = "NSHT" }, -- Macro Nature Swiftness + Healing Touch
 				{ spellID = 48438 }, -- Wild Growth
-				{ spellID = 2782, cures = { ["Poison"] = true, ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,17)) > 0 end } }, -- Remove Corruption
+				{ spellID = 2782, dispels = { ["Poison"] = true, ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,17)) > 0 end } }, -- Remove Corruption
 				{ spellID = 20484, rez = true }, -- Rebirth
 			},
 			-- spellSize = 32,
@@ -44,11 +46,14 @@ HealiumSettings = {
 	},
 	["SHAMAN"] = {
 		[3] = {
+			-- TEST MODE
 			spells = {
 				{ spellID = 974, debuffs = { 57724 } }, -- Earth Shield
 				{ spellID = 61295, buffs = { 974 } }, -- Riptide
-				{ spellID = 331, buffs = { 61295 } }, -- Healing wave
-				{ spellID = 51886, cures = { ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,12)) > 0 end } }, -- Cleanse Spirit
+				{ spellID = 331, buffs = { 61295 } }, -- Healing Wave
+				{ spellID = 77472 }, -- Greater Healing Wave
+				{ spellID = 51886, dispels = { ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,12)) > 0 end } }, -- Cleanse Spirit
+				{ spellID = 475, dispels = { ["Curse"] = true } }, -- Remove Curse (Mage)
 				{ spellID = 2008, rez = true }, -- Ancestral Spirit
 			},
 			-- spellSize = 32,
@@ -64,13 +69,20 @@ HealiumSettings = {
 			spells = {
 				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
 			},
+		},
+		[3] = {
+			spells = {
+				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
+			},
 		}
 	},
 	["MAGE"] = {
 		[1] = {
+			-- TEST MODE
 			spells = {
 				{ spellID = 475, debuffs = { 36032 } }, -- Remove Curse (Mage)
-				{ spellID = 475, cures = { ["Curse"] = true } }, -- Remove Curse (Mage)
+				{ spellID = 475, dispels = { ["Curse"] = true } }, -- Remove Curse (Mage)
+				{ spellID = 51886, dispells = { ["Curse"] = true } }, -- Cleanse Spirit (Shaman)
 				{ spellID = 475, buffs = { 6117 } }, -- Remove Curse (Mage)
 			},
 			-- spellSize = 32,
@@ -81,4 +93,11 @@ HealiumSettings = {
 			-- debuffSpacing = 2,
 		}
 	},
+	["HUNTER"] = {
+		[1] = {
+			spells = {
+				{ spellID = 34477 }
+			}
+		}
+	}
 }
