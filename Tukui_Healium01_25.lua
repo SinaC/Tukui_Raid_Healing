@@ -722,47 +722,69 @@ local function Healium_UpdateCooldowns()
 	end
 end
 
--- Color spell in blue if OOM
+-- Set OOM spells
 local function Healium_UpdateUsableSpells()
+	if not HealiumSettings.showNoMana then return end
 	--Healium_DEBUG("Healium_UpdateUsableSpells")
-	if not HealiumSettings.showNoMana and not HealiumSettings.checkRangeBySpell then return end
 	local settings = Healium_GetSettings()
 	if not settings then return end
 	for index, spellSetting in ipairs(settings.spells) do
 		local spellName
 		if spellSetting.spellID then 
 			spellName = GetSpellInfo(spellSetting.spellID)
-			--noMana = select(2, IsUsableSpell(spellSetting.spellID))
 		elseif spellSetting.macroName then
 			local macroID = GetMacroIndexByName(spellSetting.macroName)
 			if macroID > 0 then
 				spellName = GetMacroSpell(macroID)
-				--noMana = select(2, IsUsableSpell(spellName))
 			end
 		end
 		if spellName then
 			--Healium_DEBUG("spellName:"..spellName)
-			local noMana = false
-			if HealiumSettings.showNoMana then
-				noMana = select(2, IsUsableSpell(spellName))
-			end
-			local outOfRange = false
-			if HealiumSettings.checkRangeBySpell then
-				if SpellHasRange(spellName) then
-					local inRange = IsSpellInRange(spellName, button:GetParent().TargetUnit)
-					if not inRange or inRange == 0 then
-						outOfRange = true
-					end
-				end
-			end
+			local noMana = select(2, IsUsableSpell(spellName))
 			Healium_ForEachMember( 
-				function(frame, index, noMana, outOfRange)
+				function(frame, index, noMana)
 					local button = frame.healiumButtons[index]
 					if not button then return end
 					button.healiumNoMana = noMana
+				end, 
+				index, noMana)
+		end
+	end
+	Healium_ForEachMember(Healium_UpdateButtonsColor)
+end
+
+-- Set out of range spells
+local function Healium_CheckOutOfRangeSpells()
+	if not HealiumSettings.checkRangeBySpell then return end
+	--Healium_DEBUG("Healium_CheckOutOfRangeSpells")
+	local settings = Healium_GetSettings()
+	if not settings then return end
+	for index, spellSetting in ipairs(settings.spells) do
+		local spellName
+		if spellSetting.spellID then 
+			spellName = GetSpellInfo(spellSetting.spellID)
+		elseif spellSetting.macroName then
+			local macroID = GetMacroIndexByName(spellSetting.macroName)
+			if macroID > 0 then
+				spellName = GetMacroSpell(macroID)
+			end
+		end
+		if spellName then
+			--Healium_DEBUG("spellName:"..spellName)
+			local outOfRange = false
+			if SpellHasRange(spellName) then
+				local inRange = IsSpellInRange(spellName, button:GetParent().TargetUnit)
+				if not inRange or inRange == 0 then
+					outOfRange = true
+				end
+			end
+			Healium_ForEachMember( 
+				function(frame, index, outOfRange)
+					local button = frame.healiumButtons[index]
+					if not button then return end
 					button.healiumOutOfRange = outOfRange
 				end, 
-				index, noMana, outOfRange)
+				index, outOfRange)
 		end
 	end
 	Healium_ForEachMember(Healium_UpdateButtonsColor)
@@ -1115,7 +1137,7 @@ local function Healium_OnUpdate(self, elapsed)
 	self.healiumTimeSinceLastUpdate = self.healiumTimeSinceLastUpdate + elapsed
 
 	if self.healiumTimeSinceLastUpdate > Healium_UpdateDelay then
-		Healium_UpdateUsableSpells()
+		Healium_CheckOutOfRangeSpells()
 		self.healiumTimeSinceLastUpdate = 0
 	end
 end
