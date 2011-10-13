@@ -31,15 +31,16 @@
 --	-> conflict if button is colored for a dispel and nomana ==> set flag on button to determine which color set (settings showNoMana)
 -- healiumSpellDisabled, healiumNoMana, healiumDispelHighlight, healiumOutOfRange, healiumInvalid -> OK
 -- settings: showOnlyDispellableDebuff, showPets, showNoMana, checkRangeBySpell -> OK
--- slash commands
+-- slash commands -> OK
+-- BugGrabber support -> OK
+-- aggro ==> C["unitframes"].aggro = true -> OK
+-- why error on not-learned spell are not shown when logging in but are shown when /rl -> OK
 
 -- TO TEST
 -- delayed healium buttons creation while in combat (call Healium_CreateFrameButtons when out of combat) -> DOESNT WORK
--- aggro ==> C["unitframes"].aggro = true
--- range by spell: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua (button.healiumOutOfRange)
+-- range by spell: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua (button.healiumOutOfRange)   set C["unitframes"].showrange to false -> OK except for rez while target is in ghost
 
 -- TODO:
--- why error on not-learned spell are not shown when logging in but are shown when /rl
 -- why raid frame moves automatically?
 -- REDO settings: global settings, per character settings and spec settings
 --	on ENTERING_WORLD or TALENT_UPDATE, build settings from HealiumSettings (concat global, per character and spec settings)
@@ -64,18 +65,20 @@ if not HealiumSettings or not HealiumSettings.enabled or not HealiumSettings[T.m
 --		healiumDebuffs: debuff on unit (no template)
 --		healiumBuffs: buffs on unit (only buff castable by heal buttons)
 -- Fields added to healiumButton
---		healiumSpellBookID: spellID of spell linked to button (-> healiumMacroName = nil)
---		healiumMacroName: name of macro linked to button (-> healiumSpellBookID = nil)
+--		healiumSpellBookID: spellID of spell linked to button
+--		healiumMacroName: name of macro linked to button
 --		healiumSpellDisabled: button is disabled because of prereq
 --		healiumNoMana: not enough mana to cast spell
 --		healiumDispelHighlight: debuff dispellable by button
---		healiumOutOfRange: unit of of range
+--		healiumOutOfRange: unit of range
 --		healiumInvalid: spell is not valid
 
 -------------------------------------------------------
 -- Constants
 -------------------------------------------------------
 local Healium_Debug = true
+local Healium_ActivatePrimarySpecSpellName = GetSpellInfo(63645)
+local Healium_ActivateSecondarySpecSpellName = GetSpellInfo(63644) 
 local Healium_MaxButtonCount = 10
 local Healium_MaxDebuffCount = 8
 local Healium_MaxBuffCount = 6
@@ -113,7 +116,7 @@ local function Healium_Getter(value, default)
 	return value == nil and default or value
 end
 
--- Format a negative short
+-- Format big number
 local function Healium_ShortValueNegative(v)
 	if v <= 999 then return v end
 	if v >= 1000000 then
@@ -127,6 +130,7 @@ end
 
 -- Get book spell id from spell name
 local function Healium_GetSpellBookID(spellName)
+	PerformanceCounter_Update("Healium_GetSpellBookID")
 	--Healium_DEBUG("Healium_GetSpellBookID")
 	for i = 1, 300, 1 do
 		local spellBookName = GetSpellBookItemName(i, SpellBookFrame.bookType)
@@ -144,6 +148,7 @@ end
 
 -- Is spell learned?
 local function Healium_IsSpellLearned(spellID)
+	PerformanceCounter_Update("Healium_IsSpellLearned")
 	--Healium_DEBUG("Healium_IsSpellLearned")
 	local spellName = GetSpellInfo(spellID)
 	if not spellName then return end
@@ -155,6 +160,7 @@ end
 
 -- Play a sound
 local function Healium_PlayDebuffSound()
+	PerformanceCounter_Update("Healium_PlayDebuffSound")
 	--Healium_DEBUG("Healium_PlayDebuffSound")
 	PlaySoundFile("Sound\\Doodad\\BellTollHorde.wav")
 end
@@ -238,6 +244,7 @@ end
 -------------------------------------------------------
 -- Return settings for current spec
 local function Healium_GetSettings()
+	PerformanceCounter_Update("Healium_GetSettings")
 	--Healium_DEBUG("Healium_GetSettings")
 	local ptt = GetPrimaryTalentTree()
 	if not ptt then return end
@@ -246,6 +253,7 @@ end
 
 -- Get frame from unit
 local function Healium_GetFrameFromUnit(unit)
+	PerformanceCounter_Update("Healium_GetFrameFromUnit")
 	--Healium_DEBUG("Healium_GetFrameFromUnit")
 	if not Healium_Frames then return end
 	for _, frame in ipairs(Healium_Frames) do
@@ -257,6 +265,7 @@ end
 
 -- Loop among every members in party/raid and call a function
 local function Healium_ForEachMember(fct, ...)
+	PerformanceCounter_Update("Healium_ForEachMember")
 	--Healium_DEBUG("Healium_ForEachMember")
 	if not Healium_Frames then return end
 	for _, frame in ipairs(Healium_Frames) do
@@ -270,41 +279,42 @@ end
 -- Dump information about frame
 local function Healium_DumpFrame(frame)
 	if not frame then return end
-	print("Frame "..frame:GetName().." U:"..frame.unit.." D:"..tostring(frame.healiumDisabled))
+	BugGrabber_Print("Frame "..frame:GetName().." U="..frame.unit.." D="..tostring(frame.healiumDisabled))
 	if frame.healiumButtons then
-		print("Buttons:")
+		BugGrabber_Print("Buttons")
 		for i, button in ipairs(frame.healiumButtons) do
 			if button:IsShown() then
-				print("  "..i.." SID:"..tostring(button.healiumSpellBookID).." MN:"..tostring(button.healiumMacroName).." D:"..tostring(button.healiumSpellDisabled).." NM:"..tostring(button.healiumNoMana).." DH:"..tostring(button.healiumDispelHighlight).." OOR:"..tostring(button.healiumOutOfRange).." I:"..tostring(button.healiumInvalid))
+				BugGrabber_Print("  "..i.." SID="..tostring(button.healiumSpellBookID).." MN="..tostring(button.healiumMacroName).." D="..tostring(button.healiumSpellDisabled).." NM="..tostring(button.healiumNoMana).." DH="..tostring(button.healiumDispelHighlight).." OOR="..tostring(button.healiumOutOfRange).." I="..tostring(button.healiumInvalid))
 			end
 		end
 	else
-		print("Healium buttons not created")
+		BugGrabber_Print("Healium buttons not created")
 	end
 	if frame.healiumDebuffs then
-		print("Debuffs:")
+		BugGrabber_Print("Debuffs")
 		for i, debuff in ipairs(frame.healiumDebuffs) do
 			if debuff:IsShown() then
-				print("  "..i.." ID:"..tostring(debuff:GetID()).." U:"..tostring(debuff.unit))
+				BugGrabber_Print("  "..i.." ID="..tostring(debuff:GetID()).." U="..tostring(debuff.unit))
 			end
 		end
 	else
-		print("Healium debuffs not created")
+		BugGrabber_Print("Healium debuffs not created")
 	end
 	if frame.healiumBuffs then
-		print("Buffs:")
+		BugGrabber_Print("Buffs")
 		for i, buff in ipairs(frame.healiumBuffs) do
 			if buff:IsShown() then
-				print("  "..i.." ID:"..tostring(buff:GetID()).." U:"..tostring(buff.unit))
+				BugGrabber_Print("  "..i.." ID="..tostring(buff:GetID()).." U="..tostring(buff.unit))
 			end
 		end
 	else
-		print("Healium buffs not created")
+		BugGrabber_Print("Healium buffs not created")
 	end
 end
 
 -- Update healium button cooldown
 local function Healium_UpdateFrameCooldown(frame, index, start, duration, enabled)
+	PerformanceCounter_Update("Healium_UpdateFrameCooldown")
 	--Healium_DEBUG("Healium_UpdateFrameCooldown")
 	if not frame.healiumButtons then return end
 	local button = frame.healiumButtons[index]
@@ -313,6 +323,7 @@ end
 
 -- Update healium button color depending on frame and button status
 local function Healium_UpdateButtonsColor(frame)
+	PerformanceCounter_Update("Healium_UpdateButtonsColor")
 	if not frame:IsShown() then return end
 	local settings = Healium_GetSettings()
 	if not settings then return end
@@ -363,6 +374,7 @@ end
 
 -- Update healium frame debuff position
 local function Healium_UpdateFrameDebuffsPosition(frame)
+	PerformanceCounter_Update("Healium_UpdateFrameDebuffsPosition")
 	--Healium_DEBUG("Healium_UpdateFrameDebuffsPosition")
 	--Healium_DEBUG("Update debuff position for "..frame:GetName())
 	if not frame.healiumDebuffs or not frame.healiumButtons then return end
@@ -378,6 +390,7 @@ end
 
 -- Update healium frame buff/debuff and special spells
 local function Healium_UpdateFrameBuffsDebuffsSpecialSpells(frame)
+	PerformanceCounter_Update("Healium_UpdateFrameBuffsDebuffsSpecialSpells")
 	local settings = Healium_GetSettings()
 	local unit = frame.unit
 
@@ -656,6 +669,7 @@ end
 
 -- Update healium frame buttons, set texture, extra attributes and show/hide.
 local function Healium_UpdateFrameButtons(frame)
+	PerformanceCounter_Update("Healium_UpdateFrameButtons")
 	--Healium_DEBUG("Update frame buttons for "..frame:GetName())
 	if not frame.healiumButtons then return end
 	local settings = Healium_GetSettings()
@@ -701,6 +715,7 @@ end
 
 -- For each spell, get cooldown then loop among Healium Frames and set cooldown
 local function Healium_UpdateCooldowns()
+	PerformanceCounter_Update("Healium_UpdateCooldowns")
 	--Healium_DEBUG("Healium_UpdateCooldowns")
 	local settings = Healium_GetSettings()
 	if not settings then return end
@@ -724,6 +739,7 @@ end
 
 -- Set OOM spells
 local function Healium_UpdateUsableSpells()
+	PerformanceCounter_Update("Healium_UpdateUsableSpells")
 	if not HealiumSettings.showNoMana then return end
 	--Healium_DEBUG("Healium_UpdateUsableSpells")
 	local settings = Healium_GetSettings()
@@ -755,6 +771,7 @@ end
 
 -- Set out of range spells
 local function Healium_CheckOutOfRangeSpells()
+	PerformanceCounter_Update("Healium_CheckOutOfRangeSpells")
 	if not HealiumSettings.checkRangeBySpell then return end
 	--Healium_DEBUG("Healium_CheckOutOfRangeSpells")
 	local settings = Healium_GetSettings()
@@ -771,33 +788,34 @@ local function Healium_CheckOutOfRangeSpells()
 		end
 		if spellName then
 			--Healium_DEBUG("spellName:"..spellName)
-			local outOfRange = false
-			if SpellHasRange(spellName) then
-				local inRange = IsSpellInRange(spellName, button:GetParent().TargetUnit)
-				if not inRange or inRange == 0 then
-					outOfRange = true
-				end
-			end
 			Healium_ForEachMember( 
-				function(frame, index, outOfRange)
+				function(frame, index, spellName)
 					local button = frame.healiumButtons[index]
 					if not button then return end
-					button.healiumOutOfRange = outOfRange
+					local inRange = IsSpellInRange(spellName, frame.unit)
+					if not inRange or inRange == 0 then
+						button.healiumOutOfRange = true
+					else
+						button.healiumOutOfRange = false
+					end
 				end, 
-				index, outOfRange)
+				index, spellName)
 		end
 	end
 	Healium_ForEachMember(Healium_UpdateButtonsColor)
 end
 
 -- Change player's name's color if it has aggro or not
-local function Healium_UpdateThread(self, event, unit)
-	--Healium_DEBUG("Healium_UpdateThread")
+local function Healium_UpdateThreat(self, event, unit)
+	PerformanceCounter_Update("Healium_UpdateThreat")
+	--Healium_DEBUG("Healium_UpdateThreat1:"..tostring(self.unit).." / "..tostring(unit))
 	if (self.unit ~= unit) or (unit == "target" or unit == "pet" or unit == "focus" or unit == "focustarget" or unit == "targettarget") then return end
 	local threat = UnitThreatSituation(self.unit)
+	--Healium_DEBUG("Healium_UpdateThreat2:"..tostring(self.unit).." / "..tostring(unit).." --> "..tostring(threat))
 	if threat and threat > 1 then
 		--self.Name:SetTextColor(1,0.1,0.1)
-		local r, g, b = GetThreatStatusColor(status)
+		local r, g, b = GetThreatStatusColor(threat)
+		--Healium_DEBUG("==>"..r..","..g..","..b)
 		self.Name:SetTextColor(r, g, b)
 	else
 		self.Name:SetTextColor(1, 1, 1)
@@ -806,6 +824,7 @@ end
 
 -- PostUpdateHealth, called after health bar has been updated
 local function Healium_PostUpdateHeal(health, unit, min, max)
+	PerformanceCounter_Update("Healium_PostUpdateHeal")
 	--Healium_DEBUG("Healium_PostUpdateHeal: "..(unit or "nil"))
 	-- call normal raid post update heal
 	T.PostUpdateHealthRaid(health, unit, min, max)
@@ -1065,6 +1084,22 @@ local function Healium_CreateDelayedButtons()
 	return true
 end
 
+-- Check settings
+local function Healium_CheckSpellSettings()
+	-- Check settings
+	local settings = Healium_GetSettings()
+	if settings then
+		for _, spellSetting in ipairs(settings.spells) do
+			if spellSetting.spellID and not Healium_IsSpellLearned(spellSetting.spellID) then
+				local name = GetSpellInfo(spellSetting.spellID)
+				Healium_ERROR("Spell "..name.."("..spellSetting.spellID..") NOT learned")
+			elseif spellSetting.macroName and GetMacroIndexByName(spellSetting.macroName) == 0 then
+				Healium_ERROR("Macro "..macroName.." NOT found")
+			end
+		end
+	end
+end
+
 -- Handle events for Healium features
 local function Healium_OnEvent(self, event, ...)
 	local arg1 = select(1, ...)
@@ -1073,23 +1108,14 @@ local function Healium_OnEvent(self, event, ...)
 
 	--Healium_DEBUG("Event: "..event)
 
-	if event == "ADDON_LOADED" and arg1 == "Tukui_Raid_Healing" then
-		--Healium_DEBUG("ADDON_LOADED: "..arg1)
-		-- Check settings
-		local settings = Healium_GetSettings()
-		if settings then
-			for _, spellSetting in ipairs(settings.spells) do
-				if spellSetting.spellID and not Healium_IsSpellLearned(spellSetting.spellID) then
-					local name = GetSpellInfo(spellSetting.spellID)
-					Healium_ERROR("Spell "..name.."("..spellSetting.spellID..") NOT learned")
-				elseif spellSetting.macroName and GetMacroIndexByName(spellSetting.macroName) == 0 then
-					Healium_ERROR("Macro "..macroName.." NOT found")
-				end
-			end
-		end
+	-- if event == "ADDON_LOADED" and arg1 == "Tukui_Raid_Healing" then
+	-- end
+	
+	if event == "PLAYER_LOGIN" then
+		Healium_CheckSpellSettings()
 	end
 
-	if event == "PLAYER_ENTERING_WORLD" then
+	if event == "PLAYER_ENTERING_WORLD" and not self.healiumRespecing then
 		Healium_ForEachMember(Healium_UpdateFrameButtons)
 		Healium_ForEachMember(Healium_UpdateFrameDebuffsPosition)
 		Healium_ForEachMember(Healium_UpdateFrameBuffsDebuffsSpecialSpells)
@@ -1108,13 +1134,32 @@ local function Healium_OnEvent(self, event, ...)
 		end
 	end
 
+	if event == "UNIT_SPELLCAST_SENT" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName) then
+--		Healium_DEBUG("Healium Debug: Respecing Start")
+		self.healiumRespecing = true
+	end
+
+	if (event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName)  then
+--		Healium_DEBUG("Healium Debug: Respecing Interrupt or succeeded")
+		self.healiumRespecing = nil
+	end
+
 	if event == "PLAYER_TALENT_UPDATE" then
+		--Healium_DEBUG("PLAYER_TALENT_UPDATE")
+		self.healiumRespecing = nil
+		--Healium_CheckSettings()  spells are not yet known by player in this event
 		--NOT NEEDED Healium_ForEachMember(Healium_CreateFrameButtons) -- Player may switch from a spec without settings to a spec with settings
 		Healium_ForEachMember(Healium_UpdateFrameButtons)
 		Healium_ForEachMember(Healium_UpdateFrameDebuffsPosition)
 		Healium_ForEachMember(Healium_UpdateFrameBuffsDebuffsSpecialSpells)
 	end
 
+	-- if event == "SPELLS_CHANGED" and not self.healiumRespecing then
+		-- Healium_DEBUG("SPELLS_CHANGED")
+		-- Healium_ForEachMember(Healium_UpdateFrameButtons)
+		-- Healium_ForEachMember(Healium_UpdateFrameDebuffsPosition)
+	-- end
+	
 	if event == "SPELL_UPDATE_COOLDOWN" then -- TODO: use SPELL_UPDATE_USABLE instead ?
 		Healium_UpdateCooldowns()
 	end
@@ -1132,7 +1177,7 @@ local function Healium_OnEvent(self, event, ...)
 end
 
 local function Healium_OnUpdate(self, elapsed)
-	if not checkRangeBySpell then return end
+	if not HealiumSettings.checkRangeBySpell then return end
 
 	self.healiumTimeSinceLastUpdate = self.healiumTimeSinceLastUpdate + elapsed
 
@@ -1242,15 +1287,15 @@ local function Shared(self, unit)
 	local masterLooter = health:CreateTexture(nil, "OVERLAY")
 	masterLooter:Height(12*T.raidscale)
 	masterLooter:Width(12*T.raidscale)
-	self.masterLooter = masterLooter
+	self.MasterLooter = masterLooter
 	self:RegisterEvent("PARTY_LEADER_CHANGED", T.MLAnchorUpdate)
 	self:RegisterEvent("PARTY_MEMBERS_CHANGED", T.MLAnchorUpdate)
 
 	if C["unitframes"].aggro == true then
-		table.insert(self.__elements, Healium_UpdateThread)
-		self:RegisterEvent('PLAYER_TARGET_CHANGED', Healium_UpdateThread)
-		self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', Healium_UpdateThread)
-		self:RegisterEvent('UNIT_THREAT_SITUATION_UPDATE', Healium_UpdateThread)
+		table.insert(self.__elements, Healium_UpdateThreat)
+		self:RegisterEvent('PLAYER_TARGET_CHANGED', Healium_UpdateThreat)
+		self:RegisterEvent('UNIT_THREAT_LIST_UPDATE', Healium_UpdateThreat)
+		self:RegisterEvent('UNIT_THREAT_SITUATION_UPDATE', Healium_UpdateThreat)
     end
 
 	if C["unitframes"].showsymbols == true then
@@ -1339,8 +1384,11 @@ SLASH_THLM2 = "/thlm"
 SlashCmdList["THLM"] = function(cmd)
 	local function Healium_ShowHelp()
 		Healium_Message("Commands for "..SLASH_THLM1.." or "..SLASH_THLM2)
-		Healium_Message(SLASH_THLM1.." debug - toggle debug mode")
-		Healium_Message(SLASH_THLM1.." dump [unit] - dump healium frames")
+		Healium_Message(SLASH_THLM1.." debug         - toggle debug mode")
+		Healium_Message(SLASH_THLM1.." dump          - dump healium frames")
+		Healium_Message(SLASH_THLM1.." dump [unit]   - dump healium frame corresponding to unit")
+		Healium_Message(SLASH_THLM1.." dump perf     - dump performance counters")
+		Healium_Message(SLASH_THLM1.." reset perf    - reset performance counters")
 	end
 	local switch = cmd:match("([^ ]+)")
 	local args = cmd:match("[^ ]+ (.+)")
@@ -1348,18 +1396,25 @@ SlashCmdList["THLM"] = function(cmd)
 	if switch == "debug" then
 		Healium_Debug = not Healium_Debug
 		Healium_Message("Debug is "..(Healium_Debug == false and "disabled" or "enabled"))
+	-- dump: dump frame/button/buff/debuff informations
 	elseif switch == "dump" then
 		if not args then
-			print("DUMP:")
 			Healium_ForEachMember(Healium_DumpFrame)
+			BugGrabber_Dump("TukuiHealium")
+		elseif args == "perf" then
+			PerformanceCounter_Dump()
 		else
 			local frame = Healium_GetFrameFromUnit(args) -- Get frame from unit
 			if frame then
-				print("DUMP:")
 				Healium_DumpFrame(frame)
+				BugGrabber_Dump("TukuiHealium")
 			else
 				Healium_Message("Frame not found for unit "..args)
 			end
+		end
+	elseif switch == "reset" then
+		if args == "perf" then
+			PerformanceCounter_Reset()
 		end
 	else
 		Healium_ShowHelp()
@@ -1440,7 +1495,7 @@ end
 -- Handle healium specific events
 local healiumEventHandler = CreateFrame("Frame")
 healiumEventHandler:RegisterEvent("PLAYER_ENTERING_WORLD")
-healiumEventHandler:RegisterEvent("ADDON_LOADED")
+--healiumEventHandler:RegisterEvent("ADDON_LOADED")
 healiumEventHandler:RegisterEvent("RAID_ROSTER_UPDATE")
 healiumEventHandler:RegisterEvent("PARTY_MEMBERS_CHANGED")
 healiumEventHandler:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -1449,6 +1504,11 @@ healiumEventHandler:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 healiumEventHandler:RegisterEvent("UNIT_AURA")
 healiumEventHandler:RegisterEvent("UNIT_POWER")
 healiumEventHandler:RegisterEvent("SPELL_UPDATE_USABLE")
+healiumEventHandler:RegisterEvent("PLAYER_LOGIN")
+healiumEventHandler:RegisterEvent("UNIT_SPELLCAST_SENT")
+healiumEventHandler:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+healiumEventHandler:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+--healiumEventHandler:RegisterEvent("SPELLS_CHANGED")
 healiumEventHandler:SetScript("OnEvent", Healium_OnEvent)
 
 if HealiumSettings.checkRangeBySpell then
