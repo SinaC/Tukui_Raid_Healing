@@ -18,6 +18,8 @@ local backdrop = {
 }
 
 local function Shared(self, unit)
+	print("Shared: "..(unit or "nil").."  "..self:GetName())
+
 	self.colors = T.oUF_colors
 	self:RegisterForClicks("AnyUp")
 	self:SetScript('OnEnter', UnitFrame_OnEnter)
@@ -218,7 +220,8 @@ oUF:Factory(function(self)
 		self:SetHeight(header:GetAttribute('initial-height'))
 	]],
 	'initial-width', T.Scale(150*T.raidscale),
-	'initial-height', T.Scale(32*T.raidscale),	
+	'initial-height', T.Scale(32*T.raidscale),
+	"showSolo", C["unitframes"].showsolo,
 	"showParty", true, "showPlayer", C["unitframes"].showplayerinparty, "showRaid", true, "groupFilter", "1,2,3,4,5,6,7,8", "groupingOrder", "1,2,3,4,5,6,7,8", "groupBy", "GROUP", "yOffset", T.Scale(-4))
 	raid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 15, -300*T.raidscale)
 	
