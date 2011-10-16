@@ -30,7 +30,7 @@
 -- spell must be learned to appear in a button (question-mark if not learned) check IsSpellLearned(spellID) -> OK
 -- if not enough mana or reactive conditions not met, change heal button color, see http://www.wowwiki.com/API_IsUsableSpell -> OK
 --	-> conflict if button is colored for a dispel and nomana ==> set flag on button to determine which color set (settings showNoMana)
--- hPrereqFailed, hNoMana, hDispelHighlight, hOfRange, hInvalid -> OK
+-- hPrereqFailed, hOOM, hDispelHighlight, hOOR, hInvalid -> OK
 -- settings: showOnlyDispellableDebuff, showPets, showNoMana, checkOOR -> OK
 -- slash commands -> OK
 -- BugGrabber support -> OK
@@ -46,6 +46,10 @@
 --	on ENTERING_WORLD or TALENT_UPDATE, build settings from HealiumSettings (concat global, per character and spec settings)
 --	and use a global variable to store current settings
 -- CheckSpellSettings() should be called when respecing -> OK
+-- /reloadui: after which event the frames are shown ? -> OK
+--		long debuff such as Berserk are not shown after a /reloadui because frame are not shown
+--		dump temp fix: ForEachMembers check on unit ~= nil and not on shown
+-- dump frame tukui style
 
 
 -- TO TEST:
@@ -56,11 +60,9 @@
 
 -- TODO:
 -- =====
--- /reloadui: after which event the frames are shown ?
---		long debuff such as Berserk are not shown after a /reloadui because frame are not shown
---		dump temp fix: ForEachMembers check on unit ~= nil and not on shown
+-- optimize OOM: store hOldOOM, if hOldOOM and hOOM are the same, no need to call UpdateButtonColor
+-- optimize OOR: see above
 -- localization
--- dump frame tukui style
 -- why raid frame moves automatically? -> probably because unitframe are centered in raid frame
 -- multirow: 2 rows of spell/buff/debuff (looks ugly :p)
 
@@ -326,7 +328,7 @@ local function ButtonOnEnter(self)
 	GameTooltip:SetOwner(TukuiTooltipAnchor, "ANCHOR_NONE")
 	if self.hInvalid then
 		if self.hSpellBookID then
-			local name = GetSpellInfo(self.hSpellBookID) -- in this case, hSpellBookID stored global spellID
+			local name = GetSpellInfo(self.hSpellBookID) -- in this case, hSpellBookID contains global spellID
 			GameTooltip:AddLine("Unknown spell: "..name.."("..self.hSpellBookID..")", 1, 1, 1)
 		elseif self.hMacroName then
 			GameTooltip:AddLine("Unknown macro: "..self.hMacroName, 1, 1, 1)
@@ -1398,7 +1400,7 @@ local function OnEvent(self, event, ...)
 		if frame then UpdateFrameBuffsDebuffsPrereqs(frame) end -- Update buff/debuff only for unit
 	end
 
-	if (event == "UNIT_POWER" and arg1 == "player") or event == "SPELL_UPDATE_USABLE" then
+	if ((event == "UNIT_POWER" or event == "UNIT_MAXPOWER") and arg1 == "player") then-- or event == "SPELL_UPDATE_USABLE" then
 		if HealiumSettings.showOOM then
 			UpdateOOMSpells()
 		end
@@ -1436,17 +1438,17 @@ SlashCmdList["THLM"] = function(cmd)
 	-- debug: switch Debug
 	if switch == "debug" then
 		Debug = not Debug
-		Message("Debug is "..(Debug == false and "disabled" or "enabled"))
+		Message("Debug switched to "..(Debug == false and "disabled" or "enabled"))
 	-- dump: dump frame/button/buff/debuff informations
 	elseif switch == "dump" then
 		if not args then
 			--ForEachMember(DumpFrame)
-			for _, frame in ipairs(Unitframes) do
+			for _, frame in ipairs(Unitframes) do -- We want to display every frames, no filter on unit or IsShown
 				DumpFrame(frame)
 			end
 			Sack:Flush("TukuiHealium")
 		elseif args == "perf" then
-			PerformanceCounter_Dump()
+			PerformanceCounter_Dump("TukuiHealium")
 		else
 			local frame = GetFrameFromUnit(args) -- Get frame from unit
 			if frame then
@@ -1459,16 +1461,23 @@ SlashCmdList["THLM"] = function(cmd)
 	elseif switch == "reset" then
 		if args == "perf" then
 			PerformanceCounter_Reset()
+			Message("Performance counter resetted")
 		end
 	elseif switch == "refresh" then
-		SpecSettings = GetSpecSettings()
-		CheckSpellSettings()
-		ForEachMember(UpdateFrameButtons)
-		ForEachMember(UpdateFrameDebuffsPosition)
-		ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
-		UpdateCooldowns()
-		if HealiumSettings.showOOM then
-			UpdateOOMSpells()
+		if InCombatLockdown then
+			Message("Not while in combat")
+		else
+			SpecSettings = GetSpecSettings()
+			CheckSpellSettings()
+			CreateDelayedButtons();
+			ForEachMember(UpdateFrameButtons)
+			ForEachMember(UpdateFrameDebuffsPosition)
+			ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
+			UpdateCooldowns()
+			if HealiumSettings.showOOM then
+				UpdateOOMSpells()
+			end
+			Message("Frames refreshed")
 		end
 	else
 		ShowHelp()
@@ -1478,8 +1487,6 @@ end
 -- -------------------------------------------------------
 -- -- Main
 -- -------------------------------------------------------
--- local playerRaid = nil
--- local petRaid = nil
 
 oUF:RegisterStyle('TukuiHealiumR01R25', CreateUnitframe)
 
@@ -1489,22 +1496,23 @@ oUF:Factory(function(self)
 
 	local unitframeWidth = HealiumSettings and HealiumSettings.unitframeWidth or 120
 	local unitframeHeight = HealiumSettings and HealiumSettings.unitframeHeight or 28
+
 	local playerRaid = self:SpawnHeader("oUF_TukuiHealiumRaid0125", nil, "custom [@raid26,exists] hide;show", 
-	'oUF-initialConfigFunction', [[
-		local header = self:GetParent()
-		self:SetWidth(header:GetAttribute('initial-width'))
-		self:SetHeight(header:GetAttribute('initial-height'))
-	]],
-	'initial-width', T.Scale(unitframeWidth*T.raidscale),
-	'initial-height', T.Scale(unitframeHeight*T.raidscale),
-	"showSolo", C["unitframes"].showsolo,
-	"showParty", true, 
-	"showPlayer", C["unitframes"].showplayerinparty, 
-	"showRaid", true, 
-	"groupFilter", "1,2,3,4,5,6,7,8", 
-	"groupingOrder", "1,2,3,4,5,6,7,8", 
-	"groupBy", "GROUP", 
-	"yOffset", T.Scale(-4))
+		'oUF-initialConfigFunction', [[
+			local header = self:GetParent()
+			self:SetWidth(header:GetAttribute('initial-width'))
+			self:SetHeight(header:GetAttribute('initial-height'))
+		]],
+		'initial-width', T.Scale(unitframeWidth*T.raidscale),
+		'initial-height', T.Scale(unitframeHeight*T.raidscale),
+		"showSolo", C["unitframes"].showsolo,
+		"showParty", true, 
+		"showPlayer", C["unitframes"].showplayerinparty, 
+		"showRaid", true, 
+		"groupFilter", "1,2,3,4,5,6,7,8", 
+		"groupingOrder", "1,2,3,4,5,6,7,8", 
+		"groupBy", "GROUP", 
+		"yOffset", T.Scale(-4))
 	playerRaid:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 150, -300*T.raidscale)
 
 	if HealiumSettings.showPets then
@@ -1585,6 +1593,7 @@ healiumEventHandler:RegisterEvent("PLAYER_TALENT_UPDATE")
 healiumEventHandler:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 healiumEventHandler:RegisterEvent("UNIT_AURA")
 healiumEventHandler:RegisterEvent("UNIT_POWER")
+healiumEventHandler:RegisterEvent("UNIT_MAXPOWER")
 healiumEventHandler:RegisterEvent("SPELL_UPDATE_USABLE")
 --healiumEventHandler:RegisterEvent("PLAYER_LOGIN")
 healiumEventHandler:RegisterEvent("UNIT_SPELLCAST_SENT")

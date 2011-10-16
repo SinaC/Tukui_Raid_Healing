@@ -3,7 +3,7 @@
 ## Notes: Healium raid frames for Tukui
 ## Author: SinaC
 ## Credits: Tukz, Engypoo
-## Version: 2.0
+## Version: 2.1
 ## RequiredDeps: Tukui
 
 Tukui_Raid_Healing.xml

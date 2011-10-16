@@ -1,5 +1,10 @@
 local T, C, L = unpack(Tukui) -- Import: T - functions, constants, variables; C - config; L - locales
 
+-- TODO:
+-- prevButton, nextButton: SetDisabledTexture
+-- border around textarea or a line between title and textarea
+-- stand-alone addon: performance counter a table by addon
+
 -- APIs:
 -- PerformanceCounter_Update(functionName): Increment performance counter of functionName
 -- PerformanceCounter_Get(functionName): Get performance counter of functionName
@@ -48,7 +53,7 @@ local T, C, L = unpack(Tukui) -- Import: T - functions, constants, variables; C 
 -----------------------------------------------------
 -- HealiumSack
 -----------------------------------------------------
--- Code ripped from BugSack
+-- Code ripped from HealiumSack
 Sack = {}
 
 local window
@@ -125,75 +130,18 @@ local function CreateSackFrame()
 		currentErrorObject = nil
 	end)
 
-	local titlebg = window:CreateTexture(nil, "BORDER")
-	titlebg:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Title-Background")
+	local titlebg = window:CreateTexture("frame", "BORDER")
+	titlebg:SetTexture(1,1,1,0.3)
 	titlebg:SetPoint("TOPLEFT", 9, -6)
 	titlebg:SetPoint("BOTTOMRIGHT", window, "TOPRIGHT", -28, -24)
 
-	local dialogbg = window:CreateTexture(nil, "BACKGROUND")
-	dialogbg:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-CharacterTab-L1")
-	dialogbg:SetPoint("TOPLEFT", 8, -12)
-	dialogbg:SetPoint("BOTTOMRIGHT", -6, 8)
-	dialogbg:SetTexCoord(0.255, 1, 0.29, 1)
-
-	local topleft = window:CreateTexture(nil, "BORDER")
-	topleft:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	topleft:SetWidth(64)
-	topleft:SetHeight(64)
-	topleft:SetPoint("TOPLEFT")
-	topleft:SetTexCoord(0.501953125, 0.625, 0, 1)
-
-	local topright = window:CreateTexture(nil, "BORDER")
-	topright:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	topright:SetWidth(64)
-	topright:SetHeight(64)
-	topright:SetPoint("TOPRIGHT")
-	topright:SetTexCoord(0.625, 0.75, 0, 1)
-
-	local top = window:CreateTexture(nil, "BORDER")
-	top:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	top:SetHeight(64)
-	top:SetPoint("TOPLEFT", topleft, "TOPRIGHT")
-	top:SetPoint("TOPRIGHT", topright, "TOPLEFT")
-	top:SetTexCoord(0.25, 0.369140625, 0, 1)
-
-	local bottomleft = window:CreateTexture(nil, "BORDER")
-	bottomleft:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	bottomleft:SetWidth(64)
-	bottomleft:SetHeight(64)
-	bottomleft:SetPoint("BOTTOMLEFT")
-	bottomleft:SetTexCoord(0.751953125, 0.875, 0, 1)
-
-	local bottomright = window:CreateTexture(nil, "BORDER")
-	bottomright:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	bottomright:SetWidth(64)
-	bottomright:SetHeight(64)
-	bottomright:SetPoint("BOTTOMRIGHT")
-	bottomright:SetTexCoord(0.875, 1, 0, 1)
-
-	local bottom = window:CreateTexture(nil, "BORDER")
-	bottom:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	bottom:SetHeight(64)
-	bottom:SetPoint("BOTTOMLEFT", bottomleft, "BOTTOMRIGHT")
-	bottom:SetPoint("BOTTOMRIGHT", bottomright, "BOTTOMLEFT")
-	bottom:SetTexCoord(0.376953125, 0.498046875, 0, 1)
-
-	local left = window:CreateTexture(nil, "BORDER")
-	left:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	left:SetWidth(64)
-	left:SetPoint("TOPLEFT", topleft, "BOTTOMLEFT")
-	left:SetPoint("BOTTOMLEFT", bottomleft, "TOPLEFT")
-	left:SetTexCoord(0.001953125, 0.125, 0, 1)
-
-	local right = window:CreateTexture(nil, "BORDER")
-	right:SetTexture("Interface\\PaperDollInfoFrame\\UI-GearManager-Border")
-	right:SetWidth(64)
-	right:SetPoint("TOPRIGHT", topright, "BOTTOMRIGHT")
-	right:SetPoint("BOTTOMRIGHT", bottomright, "TOPRIGHT")
-	right:SetTexCoord(0.1171875, 0.2421875, 0, 1)
-
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", 2, 1)
+	local close = CreateFrame("Button", "HealiumSackCloseButton", window)
+	close:CreatePanel("Default", 20, 20, "TOPRIGHT", window, "TOPRIGHT", -4, -4)
+	close:SetFrameStrata("TOOLTIP")
+	close:StyleButton(false)
+	close:FontString("text", C.media.pixelfont, 12, "MONOCHROME")
+	close.text:SetText("X")
+	close.text:SetPoint("CENTER", 1, 1)
 	close:SetScript("OnClick", Sack.Hide)
 
 	sessionLabel = window:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -206,27 +154,13 @@ local function CreateSackFrame()
 	countLabel:SetJustifyH("RIGHT")
 	countLabel:SetTextColor(1, 1, 1, 1)
 
-	nextButton = CreateFrame("Button", "HealiumSackNextButton", window, "UIPanelButtonTemplate2")
-	--nextButton:SetTemplate("Default")
-	-- nextButton:SetNormalTexture("")
-	-- nextButton:SetPushedTexture("")
-	-- nextButton:SetHighlightTexture("")
-	nextButton:SetPoint("BOTTOMRIGHT", window, -11, 16)
-	nextButton:SetWidth(130)
-	nextButton:SetText("Next >")
-	nextButton:SetScript("OnClick", function()
-		if IsShiftKeyDown() then
-			currentErrorIndex = #currentSackContents
-		else
-			currentErrorIndex = currentErrorIndex + 1
-		end
-		UpdateSackDisplay()
-	end)
-
-	prevButton = CreateFrame("Button", "HealiumSackPrevButton", window, "UIPanelButtonTemplate2")
-	prevButton:SetPoint("BOTTOMLEFT", window, 14, 16)
-	prevButton:SetWidth(130)
-	prevButton:SetText("< Previous")
+	prevButton = CreateFrame("Button", "HealiumSackPrevButton", window)
+	prevButton:CreatePanel("Default", 130, 20, "BOTTOMLEFT", window, "BOTTOMLEFT", 20, 16)
+	prevButton:SetFrameStrata("TOOLTIP")
+	prevButton:StyleButton(false)
+	prevButton:FontString("text", C.media.pixelfont, 12, "MONOCHROME")
+	prevButton.text:SetText("< Previous")
+	prevButton.text:SetPoint("CENTER", 1, 1)
 	prevButton:SetScript("OnClick", function()
 		if IsShiftKeyDown() then
 			currentErrorIndex = 1
@@ -236,11 +170,27 @@ local function CreateSackFrame()
 		UpdateSackDisplay()
 	end)
 
-	local scroll = CreateFrame("ScrollFrame", "BugSackScroll", window, "UIPanelScrollFrameTemplate")
+	nextButton = CreateFrame("Button", "HealiumSackNextButton", window)
+	nextButton:CreatePanel("Default", 130, 20, "BOTTOMRIGHT", window, "BOTTOMRIGHT", -20, 16)
+	nextButton:SetFrameStrata("TOOLTIP")
+	nextButton:StyleButton(false)
+	nextButton:FontString("text", C.media.pixelfont, 12, "MONOCHROME")
+	nextButton.text:SetText("Next >")
+	nextButton.text:SetPoint("CENTER", 1, 1)
+	nextButton:SetScript("OnClick", function()
+		if IsShiftKeyDown() then
+			currentErrorIndex = #currentSackContents
+		else
+			currentErrorIndex = currentErrorIndex + 1
+		end
+		UpdateSackDisplay()
+	end)
+
+	local scroll = CreateFrame("ScrollFrame", "HealiumSackScroll", window, "UIPanelScrollFrameTemplate")
 	scroll:SetPoint("TOPLEFT", window, "TOPLEFT", 16, -36)
 	scroll:SetPoint("BOTTOMRIGHT", nextButton, "TOPRIGHT", -24, 8)
 
-	textArea = CreateFrame("EditBox", "BugSackScrollText", scroll)
+	textArea = CreateFrame("EditBox", "HealiumSackScrollText", scroll)
 	textArea:SetAutoFocus(false)
 	textArea:SetMultiLine(true)
 	textArea:SetFontObject(GameFontHighlightSmall)
@@ -317,7 +267,7 @@ function PerformanceCounter_Reset()
 	end
 end
 
-function PerformanceCounter_Dump()
+function PerformanceCounter_Dump(addonName)
 	if not PerformanceCounter then return end
 	local timespan = GetTime() - PerformanceCounterLastReset
 	local header = "Performance counters. Elapsed=%.2f"
@@ -329,5 +279,5 @@ function PerformanceCounter_Dump()
 		Sack:Add(line:format(key,value,value/timespan))
 	end
 	--BugGrabber_Dump("PerformanceCounter")
-	Sack:Flush("PerformanceCounter")
+	Sack:Flush(addonName)
 end

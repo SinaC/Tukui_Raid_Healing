@@ -90,6 +90,7 @@ HealiumSettings = {
 	},
 	["PRIEST"] = {
 		[1] = {
+			-- TEST MODE
 			spells = {
 				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
 				{ spellID = 527, cures = { ["Magic"] = true } }, -- Dispel Magic
@@ -97,6 +98,7 @@ HealiumSettings = {
 			},
 		},
 		[3] = {
+			-- TEST MODE
 			spells = {
 				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
 				{ spellID = 527, cures = { ["Magic"] = true } }, -- Dispel Magic
@@ -117,6 +119,7 @@ HealiumSettings = {
 	},
 	["HUNTER"] = {
 		[1] = {
+			-- TEST MODE
 			spells = {
 				{ spellID = 34477 }
 			}
