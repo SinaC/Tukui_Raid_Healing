@@ -1,6 +1,9 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-	<Script file="Debug.lua"/>
-	<Script file="FlashFrame.lua"/>
+	<Script file="locales\english.lua"/>
+	<Script file="locales\french.lua"/>
+	<Script file="debug\DumpSack.lua"/>
+	<Script file="debug\PerformanceCounter.lua"/>
+	<Script file="plugins\FlashFrame.lua"/>
 	<Script file="Tukui_Healium_Settings.lua"/>
 	<Script file="Tukui_Healium01_25.lua"/>
 	<Script file="oUF_hTukz_Raid26_40.lua"/>

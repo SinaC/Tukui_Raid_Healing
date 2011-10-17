@@ -14,12 +14,11 @@ HealiumSettings = {
 	showBuffDebuffTooltip = true, -- display buff and debuff tooltip
 	showOOM = true, -- turn heal button in blue when OOM
 	checkRangeBySpell = false, -- very time consuming and not really useful (Tukui already has per unitframe out-of-range)
-	-- debuff found in this list are not shown
-	debuffBlacklist = { 
-		--57724,	-- Berserk
+	debuffBlacklist = { -- debuff found in this list are not shown
+		57724,	-- Berserk
 		57723,	-- Time Warp
 		80354,	-- Ancient Hysteria
-		--36032,	-- Arcane Blast
+		36032,	-- Arcane Blast
 		95223,	-- Recently Mass Resurrected
 		26013,	-- Deserter
 		71041,	-- Dungeon Deserter
@@ -27,7 +26,17 @@ HealiumSettings = {
 		97821,	-- Void-Touched
 	},
 	["DRUID"] = {
-		[3] = {
+		-- 774 Rejuvenation
+		-- 2782 Remove Corruption
+		-- 5185 Healing Touch
+		-- 8936 Regrowth
+		-- 18562 Swiftmend, castable only of affected by Rejuvenation or Regrowth
+		-- 20484 Rebirth
+		-- 29166 Innervate
+		-- 33763 Lifebloom
+		-- 48438 Wild Growth
+		-- 50464 Nourish
+		[3] = { -- Restoration
 			spells = {
 				{ spellID = 774 }, -- Rejuvenation
 				{ spellID = 33763 }, -- Lifebloom
@@ -42,7 +51,7 @@ HealiumSettings = {
 		}
 	},
 	["SHAMAN"] = {
-		[3] = {
+		[3] = { -- Restoration
 			-- TEST MODE
 			spells = {
 				{ spellID = 974, debuffs = { 57724 } }, -- Earth Shield
@@ -52,6 +61,7 @@ HealiumSettings = {
 				{ spellID = 51886, dispels = { ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,12)) > 0 end } }, -- Cleanse Spirit
 				{ spellID = 475, dispels = { ["Curse"] = true } }, -- Remove Curse (Mage)
 				{ spellID = 2008, rez = true }, -- Ancestral Spirit
+				{ macroName = "toto" }, --
 			},
 			-- spells = {
 				-- { spellID = 974 }, -- Earth Shield
@@ -63,44 +73,93 @@ HealiumSettings = {
 				-- { spellID = 51886, dispels = { ["Curse"] = true, ["Magic"] = function() return select(5, GetTalentInfo(3,12)) > 0 end } }, -- Cleanse Spirit
 			-- },
 		},
-		[1] = {
-			-- TEST MODE
-			spells = {
-				{ spellID = 475, dispels = { ["Curse"] = true } }, -- Remove Curse (Mage)
-				{ spellID = 1064 }, -- Salve de Guérison
-			}
-		}
+		-- [1] = { -- Elemental
+			-- -- TEST MODE
+			-- spells = {
+				-- { spellID = 475, dispels = { ["Curse"] = true } }, -- Remove Curse (Mage)
+				-- { spellID = 1064 }, -- Salve de Guérison
+			-- }
+		-- }
 	},
 	["PALADIN"] = {
-		[1] = {
+		-- 633 Lay on Hands
+		-- 635 Holy Light
+		-- 1022 Hand of Protection
+		-- 1044 Hand of Freedom
+		-- 1038 Hand of Salvation
+		-- 4987 Cleanse
+		-- 6940 Hand of Sacrifice
+		-- 19750 Flash of Light
+		-- 20473 Holy Shock
+		-- 31789 Righteous Defense
+		-- 53563 Beacon of Light
+		-- 82326 Divine Light
+		-- 85673 Word of Glory
+		[1] = { -- Holy
 			spells = {
-				{ spellID = 20473 }, -- Horion Sacré
-				{ spellID = 85673 }, -- Mot de Gloire
-				{ spellID = 19750 }, -- Eclair Lumineux
-				{ spellID = 635 }, -- Lumière Sacrée
-				{ spellID = 82326 }, -- Lumière Divine
-				{ spellID = 633 }, -- Imposition des Mains
-				{ spellID = 1022 }, -- Main de Protection
-				{ spellID = 1044 }, -- Main de Liberté
-				{ spellID = 6940 }, -- Main de Sacrifice
-				{ spellID = 4987, cures = { ["Poison"] = true, ["Disease"] = true, ["Magic"] = function() return select(5, GetTalentInfo(1,14)) > 0 end } }, -- Epuration
-				{ spellID = 53563 }, -- Guide de Lumière
+				{ spellID = 20473 }, -- Holy Shock
+				{ spellID = 85673 }, -- Word of Glory
+				{ spellID = 19750 }, -- Flash of Light
+				{ spellID = 635 }, -- Holy Light
+				{ spellID = 82326 }, -- Divine Light
+				{ spellID = 633 }, -- Lay on Hands
+				{ spellID = 1022 }, -- Hand of Protection
+				{ spellID = 1044 }, -- Hand of Freedom
+				{ spellID = 6940 }, -- Hand of Sacrifice
+				{ spellID = 4987, cures = { ["Poison"] = true, ["Disease"] = true, ["Magic"] = function() return select(5, GetTalentInfo(1,14)) > 0 end } }, -- Cleanse
+				{ spellID = 53563 }, -- Beacon of Light
 			}
-		}
+		},
+		[2] = { -- Protection
+			spells = {
+				{ spellID = 31789 }, -- Righteous Defense
+				{ spellID = 6940 }, -- Hand of Sacrifice
+				{ spellID = 633 }, -- Lay on Hands
+				{ spellID = 4987, cures = { ["Poison"] = true, ["Disease"] = true } }, -- Cleanse
+			}
+		},
 	},
 	["PRIEST"] = {
-		[1] = {
-			-- TEST MODE
+		-- 17 Power Word: Shield not castable if affected by Weakened Soul (6788)
+		-- 139 Renew
+		-- 527 Dispel Magic (Discipline, Holy)
+		-- 528 Cure Disease
+		-- 596 Prayer of Healing
+		-- 1706 Levitate
+		-- 2061 Flash Heal
+		-- 2050 Heal
+		-- 2060 Greater Heal
+		-- 6346 Fear Ward
+		-- 32546 Binding Heal
+		-- 33076 Prayer of Mending
+		-- 47540 Penance (Discipline)
+		-- 47788 Guardian Spirit (Holy)
+		-- 73325 Leap of Faith
+		-- 88684 Holy Word: Serenity (Holy)
+		[1] = { -- Discipline
 			spells = {
 				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
+				{ spellID = 139 }, -- Renew
+				{ spellID = 2061 }, -- Flash Heal
+				{ spellID = 2050 }, -- Heal
+				{ spellID = 2060 }, -- Greater Heal
+				{ spellID = 47540 }, -- Penance
+				{ spellID = 33076 }, -- Prayer of Mending
+				{ spellID = 596 }, -- Prayer of Healing
 				{ spellID = 527, cures = { ["Magic"] = true } }, -- Dispel Magic
 				{ spellID = 528, cures = { ["Disease"] = true } }, -- Cure Disease
 			},
 		},
-		[3] = {
-			-- TEST MODE
+		[2] = {
 			spells = {
-				{ spellID = 17, debuffs = { 6788 } }, -- Power Word: Shield not castable if affected by Weakened Soul
+				{ spellID = 139 }, -- Renew
+				{ spellID = 2061 }, -- Flash Heal
+				{ spellID = 2050 }, -- Heal
+				{ spellID = 2060 }, -- Greater Heal
+				{ spellID = 88684 }, -- Holy Word: Serenity
+				{ spellID = 33076 }, -- Prayer of Mending
+				{ spellID = 596 }, -- Prayer of Healing
+				{ spellID = 47788 }, -- Guardian Spirit
 				{ spellID = 527, cures = { ["Magic"] = true } }, -- Dispel Magic
 				{ spellID = 528, cures = { ["Disease"] = true } }, -- Cure Disease
 			},

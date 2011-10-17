@@ -1,10 +1,11 @@
 -----------------------------------------------------
 -- Flash Frame
------------------------------------------------------
+
 -- APIs:
 --FlashFrame:ShowFlashFrame(frame, color, size, brightness): Start a flash on frame, size must be 10 times bigger than frame size to see it, brightness: 1->100
 --FlashFrame:HideFlashFrame(frame): Stop a flash
 
+-- Namespace
 FlashFrame = {}
 
 -- Create flash frame on a frame

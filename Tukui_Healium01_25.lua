@@ -1,3 +1,7 @@
+-- http://www.wowpedia.org/UI_best_practices
+-- http://www.wowpedia.org/Category:HOWTOs
+-- http://www.wowwiki.com/AddOn_loading_process
+
 -- TESTED:
 -- =======
 -- buff (must implement move tukui raid frame to test) -> OK
@@ -50,28 +54,34 @@
 --		long debuff such as Berserk are not shown after a /reloadui because frame are not shown
 --		dump temp fix: ForEachMembers check on unit ~= nil and not on shown
 -- dump frame tukui style
-
+-- localization: http://www.wowpedia.org/Localizing_an_addon  (search for L.)
+-- new folder structure
 
 -- TO TEST:
 -- ========
+
+
+-- ISSUES:
+-- =======
 -- range by spell: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua (button.hOOR), set C["unitframes"].showrange to false -> OK except for rez while target is in ghost
--- when connecting in solo (no group, no pet) a raidpet frame is created
+-- when connecting in solo (no group, no pet) a raidpet frame is created. After creation frame.unit = nil and frame:IsShown() returns nil
+-- on /reloadui CheckSpellSettings signals Macro as invalid
 
 
 -- TODO:
 -- =====
--- optimize OOM: store hOldOOM, if hOldOOM and hOOM are the same, no need to call UpdateButtonColor
--- optimize OOR: see above
--- localization
+-- Tank frame (attributes: [["groupFilter", "MAINTANK,TANK"]],  [["groupBy", "ROLE"]],    showParty, showRaid but not showSolo)
+-- pet spells
+-- optimize OOM, OOR ... in general way, don't call ForEachMembers(UpdateButtonsColor) so often
+-- reload settings/UpdateFrameButtons when resetting talents
 -- why raid frame moves automatically? -> probably because unitframe are centered in raid frame
 -- multirow: 2 rows of spell/buff/debuff (looks ugly :p)
-
-
+-- character specific settings
 
 -- Explanation about CheckSpellSettings and GetSpecSettings
 --[[
 /reloadui !!! frame are not shown immediately
-	ADDON_LOADED: GetPrimaryTalentTree OK | IsSpellLearned KO => GetSpecSettings
+	ADDON_LOADED: GetPrimaryTalentTree OK | IsSpellLearned KO => GetSpecSettings (+CheckSpellSettings if SpecSettings ~= nil)
 	functions using SpecSettings
 	PLAYER_LOGIN: same as above
 	PLAYER_ENTERING_WORLD: same as above
@@ -101,9 +111,6 @@ respec aborted
 	multiple UNIT_SPELLCAST_INTERRUPTED: old spec | respec = nil (->nil)
 --]]
 
--- http://forums.curseforge.com/showthread.php?t=19312
--- http://www.wowpedia.org/API_GetPrimaryTalentTree
-
 local ADDON_NAME, ns = ...
 local oUF = oUFTukui or oUF
 assert(oUF, "Tukui was unable to locate oUF install.")
@@ -114,6 +121,9 @@ ns._Headers = {}
 local T, C, L = unpack(Tukui) -- Import: T - functions, constants, variables; C - config; L - locales
 if not C["unitframes"].enable == true or C["unitframes"].gridonly == true then return end
 if not HealiumSettings or not HealiumSettings.enabled or not HealiumSettings[T.myclass] then return end
+
+local PerformanceCounter = _G["PerformanceCounter"]
+local DumpSack = _G["DumpSack"]
 
 -- Fields added to TukuiUnitframe
 --		hDisabled: true if unitframe is dead/ghost/disconnected, false otherwise
@@ -139,6 +149,7 @@ local MaxButtonCount = 12 -- TODO: set automatically using max(#spells foreach s
 local MaxDebuffCount = 8
 local MaxBuffCount = 6
 local UpdateDelay = 0.2
+local DispelSoundFile = "Sound\\Doodad\\BellTollHorde.wav"
 
 -------------------------------------------------------
 -- Variables
@@ -147,6 +158,7 @@ local DelayedButtonsCreation = {}
 local Unitframes = {}
 local LastDebuffSoundTime = GetTime()
 local SpecSettings = nil
+local LastPerformanceCounterReset = GetTime()
 
 -------------------------------------------------------
 -- Helpers
@@ -187,7 +199,7 @@ end
 
 -- Get book spell id from spell name
 local function GetSpellBookID(spellName)
-	PerformanceCounter_Update("GetSpellBookID")
+	PerformanceCounter:Increment("TukuiHealium", "GetSpellBookID")
 	--DEBUG("GetSpellBookID")
 	for i = 1, 300, 1 do
 		local spellBookName = GetSpellBookItemName(i, SpellBookFrame.bookType)
@@ -205,7 +217,7 @@ end
 
 -- Is spell learned?
 local function IsSpellLearned(spellID)
-	PerformanceCounter_Update("IsSpellLearned")
+	PerformanceCounter:Increment("TukuiHealium", "IsSpellLearned")
 	--DEBUG("IsSpellLearned")
 	local spellName = GetSpellInfo(spellID)
 	if not spellName then return nil end
@@ -225,7 +237,7 @@ end
 
 -- Get frame from unit
 local function GetFrameFromUnit(unit)
-	PerformanceCounter_Update("GetFrameFromUnit")
+	PerformanceCounter:Increment("TukuiHealium", "GetFrameFromUnit")
 	--DEBUG("GetFrameFromUnit")
 	if not Unitframes then return nil end
 	for _, frame in ipairs(Unitframes) do
@@ -237,7 +249,7 @@ end
 
 -- Loop among every members in party/raid and call a function
 local function ForEachMember(fct, ...)
-	PerformanceCounter_Update("ForEachMember")
+	PerformanceCounter:Increment("TukuiHealium", "ForEachMember")
 	if not Unitframes then return end
 	--WARNING("ForEachMember")
 	for _, frame in ipairs(Unitframes) do
@@ -256,7 +268,7 @@ end
 -------------------------------------------------------
 -- Return settings for current spec
 local function GetSpecSettings()
-	PerformanceCounter_Update("GetSettings")
+	PerformanceCounter:Increment("TukuiHealium", "GetSettings")
 	--DEBUG("GetSettings")
 	local ptt = GetPrimaryTalentTree()
 	if not ptt then return nil end
@@ -271,9 +283,13 @@ local function CheckSpellSettings()
 		for _, spellSetting in ipairs(SpecSettings.spells) do
 			if spellSetting.spellID and not IsSpellLearned(spellSetting.spellID) then
 				local name = GetSpellInfo(spellSetting.spellID)
-				ERROR("Spell "..name.."("..spellSetting.spellID..") NOT learned")
+				if name then
+					ERROR(string.format(L.healium_CHECKSPELL_SPELLNOTLEARNED, name, spellSetting.spellID))
+				else
+					ERROR(string.format(L.healium_CHECKSPELL_SPELLNOTEXISTS, spellSetting.spellID))
+				end
 			elseif spellSetting.macroName and GetMacroIndexByName(spellSetting.macroName) == 0 then
-				ERROR("Macro "..macroName.." NOT found")
+				ERROR(string.format(L.healium_CHECKSPELL_MACRONOTFOUND, spellSetting.macroName))
 			end
 		end
 	end
@@ -285,36 +301,36 @@ end
 -- Dump information about frame
 local function DumpFrame(frame)
 	if not frame then return end
-	Sack:Add("Frame "..tostring(frame:GetName()).." S="..tostring(frame:IsShown()).." U="..tostring(frame.unit).." D="..tostring(frame.hDisabled))
+	DumpSack:Add("Frame "..tostring(frame:GetName()).." S="..tostring(frame:IsShown()).." U="..tostring(frame.unit).." D="..tostring(frame.hDisabled))
 	if frame.hButtons then
-		Sack:Add("Buttons")
+		DumpSack:Add("Buttons")
 		for i, button in ipairs(frame.hButtons) do
 			if button:IsShown() then
-				Sack:Add("  "..i.." SID="..tostring(button.hSpellBookID).." MN="..tostring(button.hMacroName).." D="..tostring(button.hPrereqFailed).." NM="..tostring(button.hOOM).." DH="..tostring(button.hDispelHighlight).." OOR="..tostring(button.hOOR).." I="..tostring(button.hInvalid))
+				DumpSack:Add("  "..i.." SID="..tostring(button.hSpellBookID).." MN="..tostring(button.hMacroName).." D="..tostring(button.hPrereqFailed).." NM="..tostring(button.hOOM).." DH="..tostring(button.hDispelHighlight).." OOR="..tostring(button.hOOR).." I="..tostring(button.hInvalid))
 			end
 		end
 	else
-		Sack:Add("Healium buttons not created")
+		DumpSack:Add("Healium buttons not created")
 	end
 	if frame.hDebuffs then
-		Sack:Add("Debuffs")
+		DumpSack:Add("Debuffs")
 		for i, debuff in ipairs(frame.hDebuffs) do
 			if debuff:IsShown() then
-				Sack:Add("  "..i.." ID="..tostring(debuff:GetID()).." U="..tostring(debuff.unit))
+				DumpSack:Add("  "..i.." ID="..tostring(debuff:GetID()).." U="..tostring(debuff.unit))
 			end
 		end
 	else
-		Sack:Add("Healium debuffs not created")
+		DumpSack:Add("Healium debuffs not created")
 	end
 	if frame.hBuffs then
-		Sack:Add("Buffs")
+		DumpSack:Add("Buffs")
 		for i, buff in ipairs(frame.hBuffs) do
 			if buff:IsShown() then
-				Sack:Add("  "..i.." ID="..tostring(buff:GetID()).." U="..tostring(buff.unit))
+				DumpSack:Add("  "..i.." ID="..tostring(buff:GetID()).." U="..tostring(buff.unit))
 			end
 		end
 	else
-		Sack:Add("Healium buffs not created")
+		DumpSack:Add("Healium buffs not created")
 	end
 end
 
@@ -329,25 +345,25 @@ local function ButtonOnEnter(self)
 	if self.hInvalid then
 		if self.hSpellBookID then
 			local name = GetSpellInfo(self.hSpellBookID) -- in this case, hSpellBookID contains global spellID
-			GameTooltip:AddLine("Unknown spell: "..name.."("..self.hSpellBookID..")", 1, 1, 1)
+			GameTooltip:AddLine(string.format(L.healium_TOOLTIP_UNKNOWNSPELL, name, self.hSpellBookID), 1, 1, 1)
 		elseif self.hMacroName then
-			GameTooltip:AddLine("Unknown macro: "..self.hMacroName, 1, 1, 1)
+			GameTooltip:AddLine(string.format(L.healium_TOOLTIP_UNKNOWN_MACRO, self.hMacroName), 1, 1, 1)
 		else
-			GameTooltip:AddLine("Unknown", 1, 1, 1)
+			GameTooltip:AddLine(L.healium_TOOLTIP_UNKNOWN, 1, 1, 1)
 		end
 	else
 		if self.hSpellBookID then
 			GameTooltip:SetSpellBookItem(self.hSpellBookID, SpellBookFrame.bookType)
 		elseif self.hMacroName then
-			GameTooltip:AddLine("Macro: "..self.hMacroName, 1, 1, 1)
+			GameTooltip:AddLine(string.format(L.healium_TOOLIP_MACRO, self.hMacroName), 1, 1, 1)
 		else
-			GameTooltip:AddLine("Unknown", 1, 1, 1)
+			GameTooltip:AddLine(L.healium_TOOLTIP_UNKNOWN, 1, 1, 1)
 		end
 		local unit = SecureButton_GetUnit(self)
 		if not UnitExists(unit) then return end
 		local unitName = UnitName(unit)
 		if not unitName then unitName = "-" end
-		GameTooltip:AddLine("Target: |cFF00FF00"..unitName,1,1,1)
+		GameTooltip:AddLine(string.format(L.healium_TOOLTIP_TARGET, unitName), 1, 1, 1)
 	end
 	GameTooltip:Show()
 end
@@ -379,7 +395,7 @@ end
 -------------------------------------------------------
 -- Update healium button cooldown
 local function UpdateFrameCooldown(frame, index, start, duration, enabled)
-	PerformanceCounter_Update("UpdateFrameCooldown")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateFrameCooldown")
 	if not frame.hButtons then return end
 	--DEBUG("UpdateFrameCooldown")
 	local button = frame.hButtons[index]
@@ -393,10 +409,10 @@ end
 -- out of mana -> color in medium blue
 -- dispel highlight -> color in debuff color
 local function UpdateButtonsColor(frame)
-	PerformanceCounter_Update("UpdateButtonsColor")
-	if not frame:IsShown() then return end
+	PerformanceCounter:Increment("TukuiHealium", "UpdateButtonsColor")
 	if not SpecSettings then return end
 	if not frame.hButtons then return end
+	if not frame:IsShown() then return end
 
 	--DEBUG("UpdateButtonsColor:"..frame:GetName())
 
@@ -443,12 +459,12 @@ end
 
 -- Update healium frame debuff position, debuff must be anchored to last shown button
 local function UpdateFrameDebuffsPosition(frame)
-	PerformanceCounter_Update("UpdateFrameDebuffsPosition")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateFrameDebuffsPosition")
 	if not frame.hDebuffs or not frame.hButtons then return end
 	--DEBUG("UpdateFrameDebuffsPosition")
 	--DEBUG("Update debuff position for "..frame:GetName())
 	local anchor = frame
-	if SpecSettings then
+	if SpecSettings then -- if no heal buttons, anchor to unitframe
 		anchor = frame.hButtons[#SpecSettings.spells]
 	end
 	--local anchor = frame.hButtons[#SpecSettings.spells]
@@ -461,7 +477,7 @@ end
 
 -- Update healium frame buff/debuff and prereq
 local function UpdateFrameBuffsDebuffsPrereqs(frame)
-	PerformanceCounter_Update("UpdateFrameBuffsDebuffsPrereqs")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateFrameBuffsDebuffsPrereqs")
 	local unit = frame.unit
 	if not unit then return end
 
@@ -529,7 +545,7 @@ local function UpdateFrameBuffsDebuffsPrereqs(frame)
 					buffIndex = buffIndex + 1
 					-- too many buff?
 					if buffIndex > MaxBuffCount then
-						WARNING("Too many buff for "..frame:GetName().." "..unit)
+						WARNING(string.format(L.healium_BUFFDEBUFF_TOOMANYBUFF, frame:GetName(), unit))
 						break
 					end
 				end
@@ -611,7 +627,7 @@ local function UpdateFrameBuffsDebuffsPrereqs(frame)
 				debuffIndex = debuffIndex + 1
 				--- too many debuff?
 				if debuffIndex > MaxDebuffCount then
-					WARNING("Too many debuff for "..frame:GetName().." "..unit)
+					WARNING(string.format(L.healium_BUFFDEBUFF_TOOMANYDEBUFF, frame:GetName(), unit))
 					break
 				end
 			end
@@ -625,7 +641,7 @@ local function UpdateFrameBuffsDebuffsPrereqs(frame)
 		end
 	end
 
-	-- color dispel button if dispellable debuff + special spells management (is buff or debuff a prereq to enable/disable a spell)
+	-- color dispel button if dispellable debuff + prereqs management (is buff or debuff a prereq to enable/disable a spell)
 	if SpecSettings and frame.hButtons and not frame.hDisabled then
 		local debuffDispellableFound = false
 		local highlightDispel = Getter(HealiumSettings.highlightDispel, true)
@@ -715,7 +731,7 @@ local function UpdateFrameBuffsDebuffsPrereqs(frame)
 					--print("DEBUFF in range: "..now.."  "..h_LastDebuffSoundTime)
 					if now > LastDebuffSoundTime + 7 then -- no more than once every 7 seconds
 						--print("DEBUFF in time")
-						PlaySoundFile("Sound\\Doodad\\BellTollHorde.wav")
+						PlaySoundFile(DispelSoundFile)
 						LastDebuffSoundTime = now
 					end
 				end
@@ -729,38 +745,38 @@ end
 
 -- Update healium frame buttons, set texture, extra attributes and show/hide.
 local function UpdateFrameButtons(frame)
+	PerformanceCounter:Increment("TukuiHealium", "UpdateFrameButtons")
 	if InCombatLockdown() then
 		--DEBUG("UpdateFrameButtons: Cannot update buttons while in combat")
 		return
 	end
-	PerformanceCounter_Update("UpdateFrameButtons")
 	--DEBUG("Update frame buttons for "..frame:GetName())
 	if not frame.hButtons then return end
 	for i, button in ipairs(frame.hButtons) do
 		if SpecSettings and i <= #SpecSettings.spells then
 			--DEBUG("show button "..i.." "..frame:GetName())
 			local spellSetting = SpecSettings.spells[i]
-			local icon, name, kind
+			local icon, name, type
 			if spellSetting.spellID then
 				if IsSpellLearned(spellSetting.spellID) then
-					kind = "spell"
+					type = "spell"
 					name, _, icon = GetSpellInfo(spellSetting.spellID)
 					button.hSpellBookID = GetSpellBookID(name)
 					button.hMacroName = nil
 				end
 			elseif spellSetting.macroName then
 				if GetMacroIndexByName(spellSetting.macroName) > 0 then
-					kind = "macro"
+					type = "macro"
 					icon = select(2,GetMacroInfo(spellSetting.macroName))
 					name = spellSetting.macroName
 					button.hSpellBookID = nil
 					button.hMacroName = name
 				end
 			end
-			if kind and name and icon then
+			if type and name and icon then
 				button.texture:SetTexture(icon)
-				button:SetAttribute("type",kind)
-				button:SetAttribute(kind, name)
+				button:SetAttribute("type", type)
+				button:SetAttribute(type, name)
 				button.hInvalid = false
 			else
 				button.hInvalid = true
@@ -776,7 +792,7 @@ local function UpdateFrameButtons(frame)
 			button.hSpellBookID = nil
 			button.hSpellName = nil
 			button.hMacroName = nil
-			button.texture:SetTexture("Interface/Icons/INV_Misc_QuestionMark")
+			button.texture:SetTexture("")
 			button:Hide()
 		end
 	end
@@ -784,7 +800,7 @@ end
 
 -- For each spell, get cooldown then loop among Healium Unitframes and set cooldown
 local function UpdateCooldowns()
-	PerformanceCounter_Update("UpdateCooldowns")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateCooldowns")
 	--DEBUG("UpdateCooldowns")
 	if not SpecSettings then return end
 	for index, spellSetting in ipairs(SpecSettings.spells) do
@@ -799,7 +815,7 @@ local function UpdateCooldowns()
 				enabled = false
 			end
 		end
-		if start > 0 then
+		if start and start > 0 then
 			ForEachMember(UpdateFrameCooldown, index, start, duration, enabled)
 		end
 	end
@@ -807,7 +823,7 @@ end
 
 -- Check OOM spells
 local function UpdateOOMSpells()
-	PerformanceCounter_Update("UpdateOOMSpells")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateOOMSpells")
 	if not HealiumSettings.showOOM then return end
 	--DEBUG("UpdateOOMSpells")
 	if not SpecSettings then return end
@@ -839,7 +855,7 @@ end
 
 -- Check OOR spells
 local function UpdateOORSpells()
-	PerformanceCounter_Update("UpdateOORSpells")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateOORSpells")
 	if not HealiumSettings.checkOOR then return end
 	--DEBUG("UpdateOORSpells")
 	if not SpecSettings then return end
@@ -874,7 +890,7 @@ end
 
 -- Change player's name's color if it has aggro or not
 local function UpdateThreat(self, event, unit)
-	PerformanceCounter_Update("UpdateThreat")
+	PerformanceCounter:Increment("TukuiHealium", "UpdateThreat")
 	if (self.unit ~= unit) or (unit == "target" or unit == "pet" or unit == "focus" or unit == "focustarget" or unit == "targettarget") then return end
 	local threat = UnitThreatSituation(self.unit)
 	--DEBUG("UpdateThreat:"..tostring(self.unit).." / "..tostring(unit).." --> "..tostring(threat))
@@ -890,7 +906,7 @@ end
 
 -- PostUpdateHealth, called after health bar has been updated
 local function PostUpdateHealth(health, unit, min, max)
-	PerformanceCounter_Update("PostUpdateHeal")
+	PerformanceCounter:Increment("TukuiHealium", "PostUpdateHeal")
 	--DEBUG("PostUpdateHeal: "..(unit or "nil"))
 	-- call normal raid post update heal
 	T.PostUpdateHealthRaid(health, unit, min, max)
@@ -1287,7 +1303,7 @@ local function CreateUnitframe(self, unit)
 	UpdateFrameDebuffsPosition(self)
 
 	-- update buff/debuff/special spells
-	--UpdateFrameBuffsDebuffsPrereqs(self) -- unit not yet set, unit passed as argument is "raid" instead of player or party1 or...
+	--UpdateFrameBuffsDebuffsPrereqs(self) -- unit not yet set, unit passed as argument is "raid" instead of player or party1 or ...
 
 	-- not disabled
 	self.hDisabled = false
@@ -1301,51 +1317,41 @@ end
 -------------------------------------------------------
 -- Handle events for Healium features
 -------------------------------------------------------
-local function OnEvent(self, event, ...)
-	local arg1 = select(1, ...)
-	local arg2 = select(2, ...)
-	local arg3 = select(3, ...)
-
+local function OnEvent(self, event, arg1, arg2, arg3)
 	--DEBUG("Event: "..event)
 
 	if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
 		--DEBUG("ADDON_LOADED:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)))
-		local version = GetAddOnMetadata(ADDON_NAME, "version") or "unknown"
-		Message("Version "..version)
-		Message("Use /th for in-game options")
+		local version = GetAddOnMetadata(ADDON_NAME, "version")
+		if version then
+			Message(string.format(L.healium_GREETING_VERSION, tostring(version)))
+		else
+			Message(L.healium_GREETING_VERSIONUNKNOWN)
+		end
+		Message(L.healium_GREETING_OPTIONS)
 		SpecSettings = GetSpecSettings()
 		if SpecSettings then
 			CheckSpellSettings()
 		end
-	end
-	
-	-- if event == "PLAYER_LOGIN" then
+	--elseif event == "PLAYER_LOGIN" then
 		-- DEBUG("PLAYER_LOGIN:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)))
-	-- end
-
-	if event == "PLAYER_ALIVE" then
+	elseif event == "PLAYER_ALIVE" then
 		--DEBUG("PLAYER_ALIVE:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)))
 		SpecSettings = GetSpecSettings()
 		CheckSpellSettings()
 		ForEachMember(UpdateFrameButtons)
 		ForEachMember(UpdateFrameDebuffsPosition)
 		ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
-	end
-
-	if event == "PLAYER_ENTERING_WORLD" then
+	elseif event == "PLAYER_ENTERING_WORLD" then
 		--DEBUG("PLAYER_ENTERING_WORLD:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)).." "..tostring(self.hRespecing))
 		ForEachMember(UpdateFrameButtons)
 		ForEachMember(UpdateFrameDebuffsPosition)
 		ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
-	end
-
-	if event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
+	elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
 		ForEachMember(UpdateFrameButtons)
 		ForEachMember(UpdateFrameDebuffsPosition)
 		ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
-	end
-
-	if event == "PLAYER_REGEN_ENABLED" then
+	elseif event == "PLAYER_REGEN_ENABLED" then
 		--DEBUG("PLAYER_REGEN_ENABLED")
 		local created = CreateDelayedButtons()
 		if created then
@@ -1353,19 +1359,13 @@ local function OnEvent(self, event, ...)
 			ForEachMember(UpdateFrameDebuffsPosition)
 			ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
 		end
-	end
-
-	if event == "UNIT_SPELLCAST_SENT" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName) then
+	elseif event == "UNIT_SPELLCAST_SENT" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName) then
 		--DEBUG("UNIT_SPELLCAST_SENT:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)).." "..tostring(self.hRespecing))
 		self.hRespecing = 1 -- respec started
-	end
-
-	if (event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName) then
+	elseif (event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" and (arg2 == ActivatePrimarySpecSpellName or arg2 == ActivateSecondarySpecSpellName) then
 		--DEBUG("UNIT_SPELLCAST_INTERRUPTED:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)).." "..tostring(self.hRespecing))
 		self.hRespecing = nil --> respec stopped
-	end
-
-	if event == "PLAYER_TALENT_UPDATE" then
+	elseif event == "PLAYER_TALENT_UPDATE" then
 		--DEBUG("PLAYER_TALENT_UPDATE:"..tostring(GetPrimaryTalentTree()).."  "..tostring(IsSpellLearned(974)).." "..tostring(self.hRespecing))
 		if self.hRespecing == 2 then -- respec finished
 			SpecSettings = GetSpecSettings()
@@ -1382,25 +1382,18 @@ local function OnEvent(self, event, ...)
 			ForEachMember(UpdateFrameDebuffsPosition)
 			ForEachMember(UpdateFrameBuffsDebuffsPrereqs)
 		end
-	end
-
-	-- --if event == "SPELLS_CHANGED" and not self.hRespecing then
-	-- if event == "SPELLS_CHANGED" then
+	-- --elseif event == "SPELLS_CHANGED" and not self.hRespecing then
+	-- elseif event == "SPELLS_CHANGED" then
 		-- DEBUG("SPELLS_CHANGED:"..tostring(GetPrimaryTalentTree()).."  "..IsSpellLearned(974).." "..tostring(self.hRespecing))
 		-- -- ForEachMember(UpdateFrameButtons)
 		-- -- ForEachMember(UpdateFrameDebuffsPosition)
 	-- end
-	
-	if event == "SPELL_UPDATE_COOLDOWN" then -- TODO: use SPELL_UPDATE_USABLE instead ?
+	elseif event == "SPELL_UPDATE_COOLDOWN" then -- TODO: use SPELL_UPDATE_USABLE instead ?
 		UpdateCooldowns()
-	end
-
-	if event == "UNIT_AURA" then
+	elseif event == "UNIT_AURA" then
 		local frame = GetFrameFromUnit(arg1) -- Get frame from unit
 		if frame then UpdateFrameBuffsDebuffsPrereqs(frame) end -- Update buff/debuff only for unit
-	end
-
-	if ((event == "UNIT_POWER" or event == "UNIT_MAXPOWER") and arg1 == "player") then-- or event == "SPELL_UPDATE_USABLE" then
+	elseif (event == "UNIT_POWER" or event == "UNIT_MAXPOWER") and arg1 == "player" then-- or event == "SPELL_UPDATE_USABLE" then
 		if HealiumSettings.showOOM then
 			UpdateOOMSpells()
 		end
@@ -1409,7 +1402,6 @@ end
 
 local function OnUpdate(self, elapsed)
 	self.hTimeSinceLastUpdate = self.hTimeSinceLastUpdate + elapsed
-
 	if self.hTimeSinceLastUpdate > UpdateDelay then
 		if HealiumSettings.checkOOR then
 			UpdateOORSpells()
@@ -1425,47 +1417,63 @@ SLASH_THLM1 = "/th"
 SLASH_THLM2 = "/thlm"
 SlashCmdList["THLM"] = function(cmd)
 	local function ShowHelp()
-		Message("Commands for "..SLASH_THLM1.." or "..SLASH_THLM2)
-		Message(SLASH_THLM1.." debug         - toggle debug mode")
-		Message(SLASH_THLM1.." dump          - dump healium frames")
-		Message(SLASH_THLM1.." dump [unit]   - dump healium frame corresponding to unit")
-		Message(SLASH_THLM1.." dump perf     - dump performance counters")
-		Message(SLASH_THLM1.." reset perf    - reset performance counters")
-		Message(SLASH_THLM1.." refresh       - force a full refresh of heal buttons/buff/debuff")
+		Message(string.format(L.healium_CONSOLE_HELP_GENERAL, SLASH_THLM1, SLASH_THLM2))
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_DEBUG)
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_DUMPGENERAL)
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_DUMPUNIT)
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_DUMPPERF)
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_RESETPERF)
+		Message(SLASH_THLM1..L.healium_CONSOLE_HELP_REFRESH)
 	end
 	local switch = cmd:match("([^ ]+)")
 	local args = cmd:match("[^ ]+ (.+)")
 	-- debug: switch Debug
 	if switch == "debug" then
 		Debug = not Debug
-		Message("Debug switched to "..(Debug == false and "disabled" or "enabled"))
-	-- dump: dump frame/button/buff/debuff informations
+		Message(Debug == false and L.healium_CONSOLE_DEBUG_DISABLED or L.healium_CONSOLE_DEBUG_ENABLED)
+	-- DumpSack: dump frame/button/buff/debuff informations
 	elseif switch == "dump" then
 		if not args then
 			--ForEachMember(DumpFrame)
 			for _, frame in ipairs(Unitframes) do -- We want to display every frames, no filter on unit or IsShown
 				DumpFrame(frame)
 			end
-			Sack:Flush("TukuiHealium")
+			DumpSack:Flush("TukuiHealium")
 		elseif args == "perf" then
-			PerformanceCounter_Dump("TukuiHealium")
+			--PerformanceCounter_Dump("TukuiHealium")
+			local time = GetTime()
+			local counters = PerformanceCounter:Get("TukuiHealium")
+			if not counters then
+				DumpSack:Add("No performance counters")
+				DumpSack:Flush("TukuiHealium")
+			else
+				local timespan = GetTime() - LastPerformanceCounterReset
+				local header = "Performance counters. Elapsed=%.2f"
+				local line = "%s=%d -> %.2f/sec"
+				DumpSack:Add(header:format(timespan))
+				for key, value in pairs(counters) do
+					DumpSack:Add(line:format(key,value,value/timespan))
+				end
+				DumpSack:Flush("TukuiHealium")
+			end
 		else
 			local frame = GetFrameFromUnit(args) -- Get frame from unit
 			if frame then
 				DumpFrame(frame)
-				Sack:Flush("TukuiHealium")
+				DumpSack:Flush("TukuiHealium")
 			else
-				Message("Frame not found for unit "..args)
+				Message(string.format(L.healium_CONSOLE_DUMP_UNITNOTFOUND,args))
 			end
 		end
 	elseif switch == "reset" then
 		if args == "perf" then
-			PerformanceCounter_Reset()
-			Message("Performance counter resetted")
+			PerformanceCounter:Reset()
+			LastPerformanceCounterReset = GetTime()
+			Message(L.healium_CONSOLE_RESET_PERF)
 		end
 	elseif switch == "refresh" then
-		if InCombatLockdown then
-			Message("Not while in combat")
+		if InCombatLockdown() then
+			Message(L.healium_CONSOLE_REFRESH_NOTINCOMBAT)
 		else
 			SpecSettings = GetSpecSettings()
 			CheckSpellSettings()
@@ -1477,16 +1485,24 @@ SlashCmdList["THLM"] = function(cmd)
 			if HealiumSettings.showOOM then
 				UpdateOOMSpells()
 			end
-			Message("Frames refreshed")
+			Message(L.healium_CONSOLE_REFRESH_OK)
 		end
 	else
 		ShowHelp()
 	end
 end
 
--- -------------------------------------------------------
--- -- Main
--- -------------------------------------------------------
+-------------------------------------------------------
+-- Main
+-------------------------------------------------------
+
+-- print("L:"..tostring(L))
+-- for key, value in pairs(L) do
+	-- local substr = string.sub(key,7)
+	-- if substr and substr == "healium" then
+		-- print(tostring(key).."->"..tostring(value))
+	-- end
+-- end
 
 oUF:RegisterStyle('TukuiHealiumR01R25', CreateUnitframe)
 
@@ -1544,43 +1560,6 @@ oUF:Factory(function(self)
 		petRaid:SetPoint("TOPLEFT", playerRaid, "BOTTOMLEFT", 0, -50)
 	end
 end)
-
--- -- Pets
--- if HealiumSettings.showPets then
-	-- oUF:Factory(function(self)
-		-- oUF:SetActiveStyle("TukuiHealiumR01R25")
-
-		-- local unitframeWidth = HealiumSettings and HealiumSettings.unitframeWidth or 120
-		-- local unitframeHeight = HealiumSettings and HealiumSettings.unitframeHeight or 28
-		-- -- no pets if more than 10 players in raid
-		-- petRaid = self:SpawnHeader("oUF_TukuiHealiumRaidPet0125", "SecureGroupPetHeaderTemplate", "custom [@raid11,exists] hide;show",
-			-- 'oUF-initialConfigFunction', [[
-				-- local header = self:GetParent()
-				-- self:SetWidth(header:GetAttribute('initial-width'))
-				-- self:SetHeight(header:GetAttribute('initial-height'))
-			-- ]],
-			-- 'initial-width', T.Scale(unitframeWidth*T.raidscale),--T.Scale(66*C["unitframes"].gridscale*T.raidscale),
-			-- 'initial-height', T.Scale(unitframeHeight*T.raidscale),--T.Scale(50*C["unitframes"].gridscale*T.raidscale),
-			-- "showSolo", C["unitframes"].showsolo,
-			-- "showParty", true,
-			-- --"showPlayer", C["unitframes"].showplayerinparty,
-			-- "showRaid", true,
-			-- --"xoffset", T.Scale(3),
-			-- "yOffset", T.Scale(-3),
-			-- --"point", "LEFT",
-			-- "groupFilter", "1,2,3,4,5,6,7,8",
-			-- "groupingOrder", "1,2,3,4,5,6,7,8",
-			-- "groupBy", "GROUP",
-			-- --"maxColumns", 8,
-			-- --"unitsPerColumn", 5,
-			-- --"columnSpacing", T.Scale(3),
-			-- --"columnAnchorPoint", "TOP",
-			-- "filterOnPet", true,
-			-- "sortMethod", "NAME"
-		-- )
-		-- petRaid:SetPoint("TOPLEFT", playerRaid, "BOTTOMLEFT", 0, -50)
-	-- end)
--- end
 
 -- Handle healium specific events
 local healiumEventHandler = CreateFrame("Frame")
