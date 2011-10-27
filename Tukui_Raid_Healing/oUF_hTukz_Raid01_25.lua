@@ -7,7 +7,8 @@ ns._Headers = {}
 
 local T, C, L = unpack(Tukui) -- Import: T - functions, constants, variables; C - config; L - locales
 if not C["unitframes"].enable == true or C["unitframes"].gridonly == true then return end
-if HealiumSettings and HealiumSettings.enabled and HealiumSettings[T.myclass] then return end -- Only if Healium not activated
+-- Tukui_Healium01_25.lua if Healium enabled
+if HealiumSettings and HealiumSettings.Options and HealiumSettings.Options.enabled and HealiumSettings[T.myclass] then return end
 
 local font2 = C["media"].uffont
 local font1 = C["media"].font
@@ -18,7 +19,7 @@ local backdrop = {
 }
 
 local function Shared(self, unit)
-	print("Shared: "..(unit or "nil").."  "..self:GetName())
+	--print("Shared: "..(unit or "nil").."  "..self:GetName())
 
 	self.colors = T.oUF_colors
 	self:RegisterForClicks("AnyUp")

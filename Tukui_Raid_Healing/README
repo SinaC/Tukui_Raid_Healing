@@ -1,0 +1,181 @@
+2.5: *** TO COMMIT
+	Copy/paste bug fixed
+	TODO/ISSUES/TO TEST/TESTED list removed from code and added to README
+	Performance counter sorted on count
+	Tank frame added
+	OOM/OOR use spellName instead of spellID
+	Namelist frame (raid frame with a list of specific player) added
+	Tab with contextual menu to show/hide frame (see Tukui_TabMenu:AddCustomTab(...)) added
+	Optional deps on Tukui_TabMenu added
+	Medias folder added
+	Slash command to show/hide raid|tank|pet|namelist frame and to add/remove/clear namelist
+	New flash API
+2.4:
+	CD optimisation (cpu), BUFF/DEBUFF optimisation (memory), OOM optimisation (cpu)
+	Performance counter upgraded
+	Debuff filter: BLACKLIST/WHITELIST/DISPELLABLE/NONE
+	Bug fixed in Dump frame
+	Slash command added to display Dump frame
+2.3:
+	Debuff whitelist
+	Deletion of unused settings
+	Bug fixed with raid 40 ...
+	Performance counter enhanced
+	Bug fixed with flash frame
+2.2:
+	Localization added
+	New folder structure
+2.1:
+	Dump frame rewritten
+	Performance counter rewritten
+	Bug with OOM fixed
+2.0: 
+	Bug fixed: frame creation in combat (added an unecessary self:Show()), spells checked when logging-in and respecing, aggro fixed
+	New features: Flash dispel, addon version, dedicated dump frame, /th refresh to force a full refresh of every frames
+	More options: showBuff, showDebuff, showPets, showPercentage
+	Settings rewritten: no more GetSettings in every methods, settings are loaded when addon is loaded or talents modified
+1.6:
+	Out of range by spell fixed
+	BugGrabber for dump added
+	PerformanceCounter added
+	Slash commands for dump/performance counter added
+	Bug fixed: CheckSettings
+1.5:
+	Out of range splitted from Out Of Mana 
+1.4:
+	Slash commands added
+	Heal buttons status (NoMana, OOR, Dispel, Disabled, Invalid) added
+	Spell not learned warning added
+	Settings showOnlyDispellableDebuff, showPets, showNoMana, checkRangeBySpell added
+1.3:
+	Tooltip on button/debuff/buff
+	Raid 1-25 on healium, 26+ with classical tukui raid heal frames
+	Many settings added
+1.2:
+	Copy/Paste bug fixed
+	Sound on dispel added
+1.1:
+	Local raid member list replacing _G usage
+	Pets added
+1.0:
+	Totally rewritten and included in Tukui_Raid_Healing
+0.2:
+	Buff/debuff/cd/button/dispel/prereq OK
+0.1:
+	Healium buttons/buff/debuff added
+
+
+-- http://www.wowpedia.org/UI_best_practices
+-- http://www.wowpedia.org/Category:HOWTOs
+-- http://www.wowwiki.com/AddOn_loading_process
+-- http://forums.wowace.com/showthread.php?t=15272    GC optimization for spell list
+
+-- TESTED:
+-- =======
+-- buff -> OK
+-- debuff -> OK
+-- cd -> OK
+-- button -> OK
+-- dispel -> OK
+-- incoming heal ==> C["unitframes"].healcomm = true -> OK
+-- mana ==> included in oUF  -> OK
+-- special spells (swiftmend allowed only if rejuv or regrowth on member) (see settings) -> OK
+-- change alpha when dead/ghost or disconnected ==> included in oUF -> OK
+-- HealiumEnabled -> OK
+-- avoid using _G[] to get raid frame, use a local list -> OK
+-- pets: could Share be used to create pets ? -> OK
+-- spell/buff/debuff size/spacing -> OK
+-- sound when a dispellable spell is found -> OK
+-- spell/buff/debuff tooltip -> OK
+-- buff/debuff are not shown when connecting  this is because unit is not yet set when Shared is called (unit = raid instead of player1) -> OK
+-- rebirth not shown when dead while in combat. Forgot to add rez=true =) -> OK
+-- settings: highlightDispel, playSoundOnDispel, showBuffDebuffTooltip, showButtonTooltip, showPercentage, frame width/height -> OK
+-- sometimes buff/debuff doesn't disappear -> stupid copy/paste
+-- doesn't work if no settings found for current spec on priest. Respec works but connecting with a spec without settings doesn't work -> OK
+-- use this module only if Healium is enabled and at least a settings for current class is found, else, use classic module -> OK
+--	if grid -> raid, party
+--	else,
+--		create normal grid -> custom [@raid26,exists] show;hide
+--		if healium, create healium -> custom [@raid26,exists] hide;show + pets
+--		else, create normal custom [@raid26,exists] hide;show
+-- spell must be learned to appear in a button (question-mark if not learned) check IsSpellLearned(spellID) -> OK
+-- if not enough mana or reactive conditions not met, change heal button color, see http://www.wowwiki.com/API_IsUsableSpell -> OK
+--	-> conflict if button is colored for a dispel and nomana ==> set flag on button to determine which color set (settings showNoMana) -> OK
+-- hPrereqFailed, hOOM, hDispelHighlight, hOOR, hInvalid -> OK
+-- settings: showOnlyDispellableDebuff, showPets, showNoMana, showOOR -> OK
+-- slash commands -> OK
+-- BugGrabber support -> OK
+-- aggro ==> C["unitframes"].aggro = true -> OK
+-- why error on not-learned spell are not shown when logging in but are shown when /rl -> OK
+-- dedicated dump frame
+-- showBuff, showDebuff
+-- if no settings but showDebuff == true, display debuff
+-- delayed healium buttons creation while in combat (call CreateFrameButtons when out of combat) -> OK
+-- flash dispel -> OK
+-- display Addon version and options when connected -> OK
+-- REDO settings: global settings, per character settings and spec settings -> OK
+--	on ENTERING_WORLD or TALENT_UPDATE, build settings from HealiumSettings (concat global, per character and spec settings)
+--	and use a global variable to store current settings
+-- CheckSpellSettings() should be called when respecing -> OK
+-- /reloadui: after which event the frames are shown ? -> OK
+--		long debuff such as Berserk are not shown after a /reloadui because frame are not shown
+--		dump temp fix: ForEachMembers check on unit ~= nil and not on shown
+-- dump frame tukui style -> OK
+-- localization: http://www.wowpedia.org/Localizing_an_addon  (search for L.) -> OK
+-- new folder structure -> OK
+-- on /reloadui CheckSpellSettings signals Macro as invalid  --> when connecting, error message are displayed 2 times with PLAYER_LOGIN and PLAYER_ALIVE   when reloadui  displayed only 1 time with PLAYER_LOGIN -> OK
+-- new settings structure -> OK
+-- range by spell: Tukui\Tukui\modules\unitframes\core\oUF\elements\range.lua (button.hOOR), set C["unitframes"].showrange to false -> OK
+-- deletion of non-class specific settings -> OK
+-- new performance counter -> OK
+-- debuff filter: BLACKLIST, WHITELIST, DISPELLABLE, NONE -> OK
+-- while entering raid40 (or alterac), healium frame are considered as shown but are not shown (debuff sound is played when someone is affected by a debuff :p) -> OK (frame:GetParent():IsShown() must be true)
+-- OOM (cpu), CD (cpu), buff/debuff (memory/gc) optimization -> OK
+--	CD optimisation:
+-- 	if in raid 1 with 3 spells, when casting an instant with a CD (SPELL_UPDATE_COOLDOWN is called 3 times, 1st for GCD, 2nd for CD and 3rd dunny why)
+-- 		before: 3*1 + 3*1 + 3*1 = 9 calls to UpdateButtonCooldown
+--		now: 3*1 + 1*1 + 0*1 = 4 calls to UpdateButtonCooldown
+--	if in raid 10 with 3 spells,
+--		before: 3*10 + 3*10 + 3*10 = 90 calls
+--		now: 3*10 + 1*10 + 0 = 40 calls
+--	if in raid 10, with 9 spells,
+--		before: 9*10 + 9*10 + 9*10 = 270 calls
+--		after: 9*10 + 1*10 + 0 = 100
+-- spellName in OOM/OOR -> OK
+-- use spellName everywhere instead of spellID -> OK
+-- namelist frame: like friend frame in Healium -> OK
+-- custom tab with contextual menu to show/hide frame (see Tukui_TabMenu:AddCustomTab(...)) -> OK
+-- slash commands to show/hide main/tank/namelist frame -> OK
+-- slash command to add/remove player in namelist frame -> OK
+-- new flash API
+
+-- TO TEST:
+-- ========
+-- Tank frame (attributes: [["groupFilter", "MAINTANK,TANK"]],  [["groupBy", "ROLE"]],    showParty, showRaid but not showSolo)
+
+-- ISSUES:
+-- =======
+-- when connecting in solo (no group, no pet) a raidpet frame is created. After creation, frame.unit = nil and frame:IsShown() returns nil
+-- raid member contextual menu (right-click) is not skinned while in a raid group but is skinned in classic heal/dps tukui raidframes
+-- dump perf: sort on count
+
+-- TODO:
+-- =====
+-- compatibility with Elvui
+-- disable Tukui/Elvui raid frames on-the-fly with RegisterAttributeDriver(TUKUIRAIDFRAME/ELVUIRAIDFRAME, "[@player,exists]hide;hide")
+--  better way to do it, grab frame from _G, then UnregisterAllEvents, SetScript("OnHide", nil), Hide(), SetScript("OnShow", nil), SetScript("OnUpdate", nil)+ http://www.wowwiki.com/Widget_handlers
+--  + UnregisterAttributeDriver(frame, "state-visibility")
+-- raid header name: check Tukui\modules\unitframes\plugins\oUF_MovableFrames.lua   fct smartName
+-- add options in contextual menu
+-- split in multiple files (see comment before each code section [use/used by]). Use nested namespace, Healium as root namespace, [FileName] as child namespace
+--  see http://lua-users.org/wiki/ModuleDefinition    and    http://www.theromwiki.com/Addon_Tutorial   and   http://www.luafaq.org/
+-- set button.hNotUsable, find which event could be used to check this ( usable = select(1,IsUsableSpell))
+-- resize frame (smaller height) when raid > 15
+-- pet spells
+-- reload settings/UpdateFrameButtons when resetting talents
+-- why raid frame moves automatically? -> probably because unitframes are centered in raid frame
+-- multirow: 2 rows of spell/buff/debuff (looks ugly :p)
+-- character specific settings
+-- addon CPU profiling  http://wow.curseforge.com/addons/addon-profiler/   http://www.wowinterface.com/downloads/info13888-AddonProfiler.html
+-- set automatically MaxButtonCount using max(#spells foreach spec of current player)
+-- Integrate Healium in oUF: check AddElement method in modules/unitframes/plugins/oUF_RaidDebuffs/oUF_RaidDebuffs.lua  check if it's available only in raid/party or also for player/target/targetoftarget/...

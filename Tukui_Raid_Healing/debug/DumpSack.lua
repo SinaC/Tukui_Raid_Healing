@@ -11,13 +11,12 @@ local T, C, L = unpack(Tukui) -- Import: T - functions, constants, variables; C 
 
 -- TODO:
 -- prevButton, nextButton: SetDisabledTexture
--- border around textarea or a line between title and textarea
 
 -- Namespace
 DumpSack = {}
 
 -- Local variables
-local window
+local window = nil
 local textArea
 local nextButton
 local prevButton
@@ -184,6 +183,8 @@ function DumpSack:Flush(addonName)
 		counter = 1, -- BugGrabber/BugSack compliance
 	}
 	tinsert(currentDumpContents, entry)
+	currentErrorIndex = #currentDumpContents
+	UpdateDumpSackDisplay()
 	DumpSack:Show()
 	--local BugGrabber = _G["BugGrabber"]
 	--BugGrabber:StoreError(errorObject)
@@ -191,8 +192,8 @@ function DumpSack:Flush(addonName)
 end
 
 function DumpSack:Show()
-	UpdateDumpSackDisplay()
 	if not window or window:IsShown() then return end
+	UpdateDumpSackDisplay()
 	window:Show()
 end
 
