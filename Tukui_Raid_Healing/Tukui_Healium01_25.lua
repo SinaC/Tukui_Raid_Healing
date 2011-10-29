@@ -583,7 +583,7 @@ local function UpdateFrameBuffsDebuffsPrereqs(frame)
 				debuffCount = i-1
 				break
 			end
-			debuffType = "Curse" -- DEBUG purpose :)
+			--debuffType = "Curse" -- DEBUG purpose :)
 			listDebuffs[i] = {spellID, debuffType} -- display not filtered debuff but keep whole debuff list to check prereq
 			local dispellable = false -- default: non-dispellable
 			if debuffType then
